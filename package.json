@@ -55,6 +55,7 @@
     "electron": "^37.2.0",
     "mammoth": "^1.9.1",
     "mongodb": "^6.17.0",
+    "ollama": "^0.4.9",
     "pdf-parse": "^1.1.1",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",

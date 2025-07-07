@@ -75,8 +75,8 @@ Thumbs.db
 # Electron specific
 out/
 
-# Whisper models (large files)
-whisper.cpp/models/*.bin
+# Whisper models (large files) and embedded git repo
+whisper.cpp/
 !whisper.cpp/models/for-tests-*.bin
 
 # Data files (sessions, exports)

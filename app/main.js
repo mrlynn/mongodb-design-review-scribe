@@ -23,6 +23,7 @@ const { initializeDatabase, createCustomTemplate, updateCustomTemplate, deleteCu
 const { generateReport, getReport, getSessionReports, getUserReports, updateReport, exportReport } = require('./services/reportGenerator');
 const RAGDocumentManager = require('./services/ragDocumentManager');
 const RAGEnhancedProcessor = require('./services/ragEnhancedProcessor');
+const OllamaManager = require('./services/ollamaManager');
 
 // Import emergency debugging toolkit
 const BlankingDebugger = require('../debug-toolkit');
@@ -38,6 +39,9 @@ let blankingDebugger = null;
 // RAG services
 let ragDocumentManager = null;
 let ragEnhancedProcessor = null;
+
+// Ollama service
+let ollamaManager = null;
 
 function createSplashWindow() {
   // Get icon path for splash window
@@ -209,6 +213,12 @@ function createWindow() {
     if (processor.destroy) {
       processor.destroy();
     }
+    
+    // Clean up Ollama service
+    if (ollamaManager) {
+      ollamaManager.stop();
+      console.log('🤖 Ollama service cleaned up');
+    }
   });
 }
 
@@ -306,6 +316,49 @@ async function initializeServices() {
     await ragDocumentManager.connect();
     await ragEnhancedProcessor.initialize();
     
+    // Initialize Ollama service
+    ollamaManager = new OllamaManager();
+    
+    // Set up Ollama event handlers
+    ollamaManager.on('status', (data) => {
+      console.log('🤖 Ollama status:', data.message);
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('ollama-status-update', data);
+      }
+    });
+    
+    ollamaManager.on('error', (data) => {
+      console.error('🤖 Ollama error:', data.error);
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('ollama-error', data);
+      }
+    });
+    
+    ollamaManager.on('download-progress', (data) => {
+      console.log(`🤖 Download progress: ${data.model} - ${data.percentage}%`);
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('ollama-download-progress', data);
+      }
+    });
+    
+    // Initialize Ollama (this will check if it's running and ensure default model)
+    console.log('🤖 Initializing Ollama service...');
+    try {
+      await ollamaManager.initialize();
+      await ollamaManager.ensureModel(); // Ensures default model is available
+      
+      // Connect OllamaManager to the LLM provider system
+      const { llmManager } = require('./services/llmProviders');
+      if (llmManager && llmManager.providers.ollama) {
+        llmManager.providers.ollama.setOllamaManager(ollamaManager);
+        console.log('🔗 Connected OllamaManager to LLM provider system');
+      }
+      
+      console.log('🤖 Ollama service initialized successfully');
+    } catch (error) {
+      console.warn('🤖 Ollama service not available, will fallback to other LLM providers:', error.message);
+    }
+    
     console.log('All services initialized successfully');
   } catch (error) {
     console.error('Error initializing services:', error);
@@ -342,6 +395,12 @@ app.on('window-all-closed', () => {
     } catch (error) {
       console.error('Failed to stop power save blocker on exit:', error);
     }
+  }
+  
+  // Clean up Ollama service
+  if (ollamaManager) {
+    ollamaManager.stop();
+    console.log('🤖 Ollama service cleaned up on app exit');
   }
   
   if (process.platform !== 'darwin') {
@@ -820,6 +879,107 @@ ipcMain.handle('test-llm-provider', async (_, providerName) => {
   } catch (error) {
     console.error('Error testing LLM provider:', error);
     return { error: error.message, connected: false };
+  }
+});
+
+// IPC: Get Ollama status
+ipcMain.handle('get-ollama-status', async () => {
+  try {
+    if (ollamaManager) {
+      return { success: true, status: ollamaManager.getStatus() };
+    }
+    return { success: false, error: 'Ollama not initialized' };
+  } catch (error) {
+    console.error('Error getting Ollama status:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// IPC: List available Ollama models
+ipcMain.handle('list-ollama-models', async () => {
+  try {
+    if (ollamaManager) {
+      const models = await ollamaManager.listModels();
+      return { success: true, models };
+    }
+    return { success: false, error: 'Ollama not initialized' };
+  } catch (error) {
+    console.error('Error listing Ollama models:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// IPC: Download Ollama model
+ipcMain.handle('download-ollama-model', async (_, modelName) => {
+  try {
+    if (ollamaManager) {
+      await ollamaManager.downloadModel(modelName);
+      return { success: true, message: `Model ${modelName} downloaded successfully` };
+    }
+    return { success: false, error: 'Ollama not initialized' };
+  } catch (error) {
+    console.error('Error downloading Ollama model:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// IPC: Ensure Ollama model
+ipcMain.handle('ensure-ollama-model', async (_, modelName) => {
+  try {
+    if (ollamaManager) {
+      await ollamaManager.ensureModel(modelName);
+      return { success: true, message: `Model ${modelName} is ready` };
+    }
+    return { success: false, error: 'Ollama not initialized' };
+  } catch (error) {
+    console.error('Error ensuring Ollama model:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// IPC: Delete Ollama model
+ipcMain.handle('delete-ollama-model', async (_, modelName) => {
+  try {
+    if (ollamaManager) {
+      await ollamaManager.deleteModel(modelName);
+      return { success: true, message: `Model ${modelName} deleted successfully` };
+    }
+    return { success: false, error: 'Ollama not initialized' };
+  } catch (error) {
+    console.error('Error deleting Ollama model:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// IPC: Get recommended Ollama models based on system resources
+ipcMain.handle('get-recommended-ollama-models', async () => {
+  try {
+    const os = require('os');
+    const totalMem = Math.round(os.totalmem() / (1024 * 1024 * 1024)); // Convert to GB
+    const recommended = OllamaManager.getRecommendedModels(totalMem);
+    
+    return { 
+      success: true, 
+      models: recommended,
+      systemRamGB: totalMem 
+    };
+  } catch (error) {
+    console.error('Error getting recommended Ollama models:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// IPC: Generate response with Ollama
+ipcMain.handle('ollama-generate', async (_, messages, options = {}) => {
+  try {
+    if (ollamaManager && ollamaManager.getStatus().isRunning) {
+      const response = await ollamaManager.generateResponse(messages, options);
+      return { success: true, response };
+    }
+    return { success: false, error: 'Ollama not running or initialized' };
+  } catch (error) {
+    console.error('Error generating Ollama response:', error);
+    return { success: false, error: error.message };
   }
 });
 

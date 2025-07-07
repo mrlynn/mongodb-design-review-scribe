@@ -222,15 +222,42 @@ Extract specific, actionable items with clear ownership when possible. Only incl
 
 // Ollama Provider (Local)
 class OllamaProvider extends BaseProvider {
+  constructor() {
+    super();
+    this.ollamaManager = null;
+  }
+
   getName() { return 'Ollama (Local)'; }
-  getDescription() { return 'Local LLM running via Ollama - privacy-first, no API key required'; }
+  getDescription() { return 'Local LLM running via Ollama - privacy-first, no API key required, automatic model management'; }
   requiresApiKey() { return false; }
+  
   getAvailableModels() { 
-    return ['llama3', 'llama2', 'codestral', 'mistral', 'gemma', 'phi3', 'qwen2.5']; 
+    return [
+      'llama3.1:8b',
+      'llama3.1:70b', 
+      'codellama:7b',
+      'codellama:13b',
+      'phi3:mini',
+      'phi3:medium',
+      'mistral:7b',
+      'gemma:7b',
+      'qwen2.5:7b'
+    ]; 
+  }
+
+  setOllamaManager(manager) {
+    this.ollamaManager = manager;
   }
 
   async testConnection(config) {
     try {
+      // If we have access to the OllamaManager, use it
+      if (this.ollamaManager) {
+        const status = this.ollamaManager.getStatus();
+        return status.isRunning;
+      }
+
+      // Fallback to direct API check
       const response = await this.makeRequest(config.llm.endpoint || 'http://localhost:11434', '/api/tags', 'GET');
       return !!(response && response.models);
     } catch (error) {
@@ -240,8 +267,47 @@ class OllamaProvider extends BaseProvider {
   }
 
   async generateCompletion(prompt, config, options = {}) {
+    try {
+      // If we have access to the OllamaManager, use it (preferred)
+      if (this.ollamaManager && this.ollamaManager.getStatus().isRunning) {
+        const modelName = config.llm.model || 'llama3.1:8b';
+        
+        // Ensure the model is available
+        await this.ollamaManager.ensureModel(modelName);
+        
+        // Convert prompt to messages format
+        const messages = [
+          { role: 'user', content: prompt }
+        ];
+
+        // Generate response using OllamaManager
+        const response = await this.ollamaManager.generateResponse(messages, {
+          temperature: options.temperature || 0.3,
+          top_p: options.top_p || 0.9
+        });
+
+        return response;
+      }
+
+      // Fallback to direct API calls
+      console.warn('🤖 OllamaManager not available, falling back to direct API calls');
+      return await this.generateCompletionDirect(prompt, config, options);
+      
+    } catch (error) {
+      console.error('Ollama completion failed:', error);
+      
+      // Try fallback method
+      try {
+        return await this.generateCompletionDirect(prompt, config, options);
+      } catch (fallbackError) {
+        throw new Error(`Ollama generation failed: ${error.message}. Fallback also failed: ${fallbackError.message}`);
+      }
+    }
+  }
+
+  async generateCompletionDirect(prompt, config, options = {}) {
     const payload = {
-      model: config.llm.model || 'llama3',
+      model: config.llm.model || 'llama3.1:8b',
       prompt: prompt,
       stream: false,
       options: {
@@ -277,7 +343,8 @@ class OllamaProvider extends BaseProvider {
         method: method,
         headers: {
           'Content-Type': 'application/json'
-        }
+        },
+        timeout: 60000 // 60 second timeout for model operations
       };
 
       const req = client.request(options, (res) => {
@@ -288,12 +355,16 @@ class OllamaProvider extends BaseProvider {
             const parsed = JSON.parse(responseData);
             resolve(parsed);
           } catch (e) {
-            reject(e);
+            reject(new Error(`Failed to parse response: ${e.message}`));
           }
         });
       });
 
       req.on('error', reject);
+      req.on('timeout', () => {
+        req.destroy();
+        reject(new Error('Request timeout'));
+      });
       
       if (data) {
         req.write(JSON.stringify(data));

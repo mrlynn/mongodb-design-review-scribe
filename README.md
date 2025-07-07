@@ -29,24 +29,35 @@ npm start
 
 ## Setup Options
 
-### Option 1: Automated Setup (Recommended)
-Use our setup scripts for easy installation:
+### Option 1: Fully Automated Setup (Recommended)
+The app now handles Ollama automatically! Just run:
 
 ```bash
 # Set up Whisper for speech recognition
 chmod +x setup-whisper.sh && ./setup-whisper.sh
 
-# Set up Ollama for local AI (optional - you can use cloud APIs instead)
+# Ollama will be automatically managed by the app
+npm start
+```
+
+The app will:
+- ✅ Automatically detect if Ollama is running
+- ✅ Download and install models as needed
+- ✅ Show progress during model downloads
+- ✅ Fallback to cloud providers if Ollama unavailable
+
+### Option 2: Manual Ollama Setup (Optional)
+If you prefer to set up Ollama manually:
+
+```bash
+# Install and configure Ollama manually
 chmod +x setup-ollama.sh && ./setup-ollama.sh
 ```
 
-### Option 2: Manual Setup
-See [SETUP.md](./SETUP.md) for detailed manual installation instructions.
-
 ### Option 3: Cloud-Only Setup
-Skip local AI setup and use cloud providers:
+Skip local AI completely and use cloud providers:
 1. Get API keys from OpenAI, Claude, or other providers
-2. Configure in app settings
+2. Configure in app Settings → LLM Configuration
 3. Only run `./setup-whisper.sh` for speech recognition
 
 ### 3. Install Node.js Dependencies
