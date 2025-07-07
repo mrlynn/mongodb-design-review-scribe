@@ -11,42 +11,43 @@ MongoDB Design Review Scribe is a specialized tool for conducting MongoDB design
 - **Privacy-First**: All speech processing and LLM operations run locally on your machine
 - **Session Management**: Saves design review sessions with MongoDB-specific insights
 
-## Prerequisites
-
-### 1. Install Ollama
-Ollama is required for local LLM topic extraction.
+## Quick Start
 
 ```bash
-# macOS/Linux
-curl -fsSL https://ollama.com/install.sh | sh
+# 1. Clone and install dependencies
+git clone https://github.com/mrlynn/mongodb-design-review-scribe.git
+cd mongodb-design-review-scribe
+npm install
 
-# Start Ollama service
-ollama serve
+# 2. Set up dependencies (choose your preference)
+./setup-whisper.sh    # For speech recognition
+./setup-ollama.sh     # For local AI (optional)
 
-# Pull a model (e.g., llama3)
-ollama pull llama3
+# 3. Start the application
+npm start
 ```
 
-### 2. Quick Setup (Automated)
-Run the automated setup script to install whisper.cpp:
+## Setup Options
+
+### Option 1: Automated Setup (Recommended)
+Use our setup scripts for easy installation:
 
 ```bash
-npm run setup
+# Set up Whisper for speech recognition
+chmod +x setup-whisper.sh && ./setup-whisper.sh
+
+# Set up Ollama for local AI (optional - you can use cloud APIs instead)
+chmod +x setup-ollama.sh && ./setup-ollama.sh
 ```
 
-Or install whisper.cpp manually:
+### Option 2: Manual Setup
+See [SETUP.md](./SETUP.md) for detailed manual installation instructions.
 
-```bash
-# Clone whisper.cpp
-git clone https://github.com/ggerganov/whisper.cpp.git
-cd whisper.cpp
-
-# Build
-make
-
-# Download a model (base.en recommended for English)
-bash ./models/download-ggml-model.sh base.en
-```
+### Option 3: Cloud-Only Setup
+Skip local AI setup and use cloud providers:
+1. Get API keys from OpenAI, Claude, or other providers
+2. Configure in app settings
+3. Only run `./setup-whisper.sh` for speech recognition
 
 ### 3. Install Node.js Dependencies
 
