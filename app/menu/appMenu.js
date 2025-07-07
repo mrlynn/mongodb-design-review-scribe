@@ -21,10 +21,10 @@ class AppMenuBuilder {
 
   buildDarwinTemplate() {
     const subMenuAbout = {
-      label: 'MongoDB Design Review Scribe',
+      label: 'bitscribe',
       submenu: [
         {
-          label: 'About MongoDB Design Review Scribe',
+          label: 'About bitscribe',
           selector: 'orderFrontStandardAboutPanel:',
           click: () => this.showAbout()
         },
@@ -38,7 +38,7 @@ class AppMenuBuilder {
         { label: 'Services', submenu: [] },
         { type: 'separator' },
         {
-          label: 'Hide MongoDB Design Review Scribe',
+          label: 'Hide bitscribe',
           accelerator: 'Command+H',
           selector: 'hide:'
         },
@@ -445,7 +445,7 @@ class AppMenuBuilder {
         { label: 'Bring All to Front', role: 'front' },
         { type: 'separator' },
         {
-          label: 'MongoDB Design Review Scribe',
+          label: 'bitscribe',
           type: 'checkbox',
           checked: true,
           click: () => this.mainWindow.show()
@@ -498,7 +498,7 @@ class AppMenuBuilder {
         ...(this.platform !== 'darwin' ? [
           { type: 'separator' },
           {
-            label: 'About MongoDB Design Review Scribe',
+            label: 'About bitscribe',
             click: () => this.showAbout()
           }
         ] : [])

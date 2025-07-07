@@ -1,4 +1,4 @@
-// Memory Management Service for MongoDB Design Review Scribe
+// Memory Management Service for bitscribe
 const os = require('os');
 
 class MemoryManager {

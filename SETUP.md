@@ -1,6 +1,6 @@
-# MongoDB Design Review Scribe - Setup Guide
+# bitscribe - Setup Guide
 
-This guide will help you set up all dependencies for the MongoDB Design Review Scribe application.
+This guide will help you set up all dependencies for the bitscribe application.
 
 ## Prerequisites
 
@@ -223,4 +223,4 @@ NODE_OPTIONS=--max-old-space-size=4096
 3. Go to Settings → RAG Documents to upload reference materials
 4. Start a recording session to test everything works
 
-Enjoy using MongoDB Design Review Scribe! 🎉
+Enjoy using bitscribe! 🎉

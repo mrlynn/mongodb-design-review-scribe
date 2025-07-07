@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# MongoDB Design Review Scribe - Whisper.cpp Setup Script
-echo "🎤 Setting up whisper.cpp for MongoDB Design Review Scribe..."
+# bitscribe - Whisper.cpp Setup Script
+echo "🎤 Setting up whisper.cpp for bitscribe..."
 
 # Colors for output
 GREEN='\033[0;32m'
@@ -11,7 +11,7 @@ NC='\033[0m' # No Color
 
 # Check if we're in the right directory
 if [ ! -f "package.json" ]; then
-    echo -e "${RED}❌ Error: Please run this script from the MongoDB Design Review Scribe root directory${NC}"
+    echo -e "${RED}❌ Error: Please run this script from the bitscribe root directory${NC}"
     exit 1
 fi
 
@@ -131,12 +131,12 @@ fi
 
 echo ""
 echo -e "${GREEN}🎉 Setup complete!${NC}"
-echo -e "${GREEN}✅ whisper.cpp is ready for MongoDB Design Review Scribe${NC}"
+echo -e "${GREEN}✅ whisper.cpp is ready for bitscribe${NC}"
 echo ""
 echo -e "${YELLOW}📁 Installation summary:${NC}"
 echo -e "   Binary: ${WHISPER_BIN}"
 echo -e "   Model:  whisper.cpp/models/ggml-base.en.bin"
 echo ""
-echo -e "${YELLOW}🚀 You can now start the MongoDB Design Review Scribe app with:${NC}"
+echo -e "${YELLOW}🚀 You can now start the bitscribe app with:${NC}"
 echo -e "   npm run dev"
 echo ""

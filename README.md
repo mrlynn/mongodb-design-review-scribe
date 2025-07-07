@@ -1,6 +1,6 @@
-# MongoDB Design Review Scribe
+# bitscribe
 
-MongoDB Design Review Scribe is a specialized tool for conducting MongoDB design review interviews with customers. It provides real-time transcription, analysis, and generates comprehensive reports with MongoDB-specific recommendations and best practices.
+bitscribe is a specialized tool for conducting MongoDB design review interviews with customers. It provides real-time transcription, analysis, and generates comprehensive reports with MongoDB-specific recommendations and best practices.
 
 ## Features
 

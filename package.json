@@ -1,6 +1,6 @@
 {
-  "name": "mongodb-design-review-scribe",
-  "productName": "MongoDB Design Review Scribe",
+  "name": "bitscribe",
+  "productName": "bitscribe",
   "version": "1.0.0",
   "description": "Specialized tool for MongoDB design review interviews with real-time transcription and comprehensive report generation.",
   "main": "app/main.js",
@@ -10,9 +10,9 @@
     "url": "https://github.com/mongodb/design-review-scribe.git"
   },
   "author": {
-    "name": "MongoDB Design Review Team",
-    "email": "design-review@mongodb.com",
-    "url": "https://mongodb.com"
+    "name": "Michael Lynn",
+    "email": "merlynn@gmail.com",
+    "url": "https://mlynn.org"
   },
   "license": "MIT",
   "keywords": [

@@ -1,6 +1,6 @@
-appId: com.mongodb.design-review-scribe
-productName: MongoDB Design Review Scribe
-copyright: Copyright © 2025 MongoDB. All rights reserved.
+appId: org.mlynn.bitscribe
+productName: bitscribe
+copyright: Copyright © 2025 Michael Lynn. All rights reserved.
 
 directories:
   output: dist
@@ -77,9 +77,9 @@ linux:
       arch: [x64]
 
 snap:
-  summary: MongoDB design review interview analysis tool
+  summary: AI Research Assistant
   description: |
-    MongoDB Design Review Scribe captures customer interviews in real-time,
+    bitscribe captures customer interviews in real-time,
     analyzes design patterns, identifies issues, and generates comprehensive
     reports with actionable recommendations based on MongoDB best practices.
   grade: stable

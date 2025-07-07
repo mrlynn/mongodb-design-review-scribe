@@ -1,4 +1,4 @@
-// RAG Document Management Service for MongoDB Design Review Scribe
+// RAG Document Management Service for bitscribe
 const fs = require('fs');
 const path = require('path');
 const { MongoClient } = require('mongodb');

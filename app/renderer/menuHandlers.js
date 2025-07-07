@@ -1,139 +1,147 @@
 // Menu event handlers for the renderer process
 
 export function setupMenuHandlers() {
+  // Check if require is available (old API)
+  if (!window.require) {
+    console.warn('window.require not available, menu handlers not initialized');
+    return;
+  }
+
+  const { ipcRenderer } = window.require('electron');
+  
   // File menu handlers
-  window.electronAPI.on('new-session', () => {
+  ipcRenderer.on('new-session', () => {
     if (confirm('Start a new session? Current session will be saved.')) {
       window.dispatchEvent(new CustomEvent('new-session'));
     }
   });
 
-  window.electronAPI.on('save-session', () => {
+  ipcRenderer.on('save-session', () => {
     window.dispatchEvent(new CustomEvent('save-session'));
   });
 
-  window.electronAPI.on('save-session-as', () => {
+  ipcRenderer.on('save-session-as', () => {
     window.dispatchEvent(new CustomEvent('save-session-as'));
   });
 
-  window.electronAPI.on('open-session', () => {
+  ipcRenderer.on('open-session', () => {
     window.dispatchEvent(new CustomEvent('open-session'));
   });
 
-  window.electronAPI.on('export-markdown', () => {
+  ipcRenderer.on('export-markdown', () => {
     window.dispatchEvent(new CustomEvent('export-markdown'));
   });
 
-  window.electronAPI.on('export-pdf', () => {
+  ipcRenderer.on('export-pdf', () => {
     window.dispatchEvent(new CustomEvent('export-pdf'));
   });
 
-  window.electronAPI.on('export-docx', () => {
+  ipcRenderer.on('export-docx', () => {
     window.dispatchEvent(new CustomEvent('export-docx'));
   });
 
-  window.electronAPI.on('export-transcript', () => {
+  ipcRenderer.on('export-transcript', () => {
     window.dispatchEvent(new CustomEvent('export-transcript'));
   });
 
   // Edit menu handlers
-  window.electronAPI.on('show-find', () => {
+  ipcRenderer.on('show-find', () => {
     window.dispatchEvent(new CustomEvent('show-find'));
   });
 
-  window.electronAPI.on('edit-transcript', () => {
+  ipcRenderer.on('edit-transcript', () => {
     window.dispatchEvent(new CustomEvent('edit-transcript'));
   });
 
-  window.electronAPI.on('add-note', () => {
+  ipcRenderer.on('add-note', () => {
     window.dispatchEvent(new CustomEvent('add-note'));
   });
 
-  window.electronAPI.on('add-timestamp', () => {
+  ipcRenderer.on('add-timestamp', () => {
     window.dispatchEvent(new CustomEvent('add-timestamp'));
   });
 
   // View menu handlers
-  window.electronAPI.on('toggle-recording-controls', () => {
+  ipcRenderer.on('toggle-recording-controls', () => {
     window.dispatchEvent(new CustomEvent('toggle-recording-controls'));
   });
 
-  window.electronAPI.on('toggle-live-transcript', () => {
+  ipcRenderer.on('toggle-live-transcript', () => {
     window.dispatchEvent(new CustomEvent('toggle-live-transcript'));
   });
 
-  window.electronAPI.on('toggle-insights', () => {
+  ipcRenderer.on('toggle-insights', () => {
     window.dispatchEvent(new CustomEvent('toggle-insights'));
   });
 
-  window.electronAPI.on('toggle-captions', () => {
+  ipcRenderer.on('toggle-captions', () => {
     window.dispatchEvent(new CustomEvent('toggle-captions'));
   });
 
-  window.electronAPI.on('show-debug-info', () => {
+  ipcRenderer.on('show-debug-info', () => {
     window.dispatchEvent(new CustomEvent('show-debug-info'));
   });
 
   // Tools menu handlers
-  window.electronAPI.on('generate-report', () => {
+  ipcRenderer.on('generate-report', () => {
     window.dispatchEvent(new CustomEvent('generate-report'));
   });
 
-  window.electronAPI.on('analyze-patterns', () => {
+  ipcRenderer.on('analyze-patterns', () => {
     window.dispatchEvent(new CustomEvent('analyze-patterns'));
   });
 
-  window.electronAPI.on('check-best-practices', () => {
+  ipcRenderer.on('check-best-practices', () => {
     window.dispatchEvent(new CustomEvent('check-best-practices'));
   });
 
-  window.electronAPI.on('analyze-schema', () => {
+  ipcRenderer.on('analyze-schema', () => {
     window.dispatchEvent(new CustomEvent('analyze-schema'));
   });
 
-  window.electronAPI.on('test-ai-connection', () => {
+  ipcRenderer.on('test-ai-connection', () => {
     window.dispatchEvent(new CustomEvent('test-ai-connection'));
   });
 
   // Help menu handlers
-  window.electronAPI.on('show-keyboard-shortcuts', () => {
+  ipcRenderer.on('show-keyboard-shortcuts', () => {
     window.dispatchEvent(new CustomEvent('show-keyboard-shortcuts'));
   });
 
-  window.electronAPI.on('show-about', () => {
+  ipcRenderer.on('show-about', () => {
     window.dispatchEvent(new CustomEvent('show-about'));
   });
 
-  window.electronAPI.on('start-tutorial', () => {
+  ipcRenderer.on('start-tutorial', () => {
     window.dispatchEvent(new CustomEvent('start-tutorial'));
   });
 
   // Context menu handlers
-  window.electronAPI.on('analyze-as-schema', (data) => {
+  ipcRenderer.on('analyze-as-schema', (data) => {
     window.dispatchEvent(new CustomEvent('analyze-as-schema', { detail: data }));
   });
 
-  window.electronAPI.on('analyze-as-query', (data) => {
+  ipcRenderer.on('analyze-as-query', (data) => {
     window.dispatchEvent(new CustomEvent('analyze-as-query', { detail: data }));
   });
 
-  window.electronAPI.on('research-topic', (data) => {
+  ipcRenderer.on('research-topic', (data) => {
     window.dispatchEvent(new CustomEvent('research-topic', { detail: data }));
   });
 
-  window.electronAPI.on('add-to-notes', (data) => {
+  ipcRenderer.on('add-to-notes', (data) => {
     window.dispatchEvent(new CustomEvent('add-to-notes', { detail: data }));
   });
 
-  window.electronAPI.on('create-action-item', (data) => {
+  ipcRenderer.on('create-action-item', (data) => {
     window.dispatchEvent(new CustomEvent('create-action-item', { detail: data }));
   });
 
-  window.electronAPI.on('add-note-at-position', (data) => {
+  ipcRenderer.on('add-note-at-position', (data) => {
     window.dispatchEvent(new CustomEvent('add-note-at-position', { detail: data }));
   });
 
-  window.electronAPI.on('insert-timestamp', () => {
+  ipcRenderer.on('insert-timestamp', () => {
     window.dispatchEvent(new CustomEvent('insert-timestamp'));
   });
 }

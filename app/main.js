@@ -121,6 +121,7 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
+      // preload: path.join(__dirname, 'preload.js'), // Temporarily disable preload
       backgroundThrottling: false, // Prevent background throttling during long sessions
       // Enable additional debugging flags
       webSecurity: false, // Allow debugging tools

@@ -18,6 +18,7 @@ import remarkGfm from 'remark-gfm';
 import ErrorBoundary from './components/ErrorBoundary.jsx';
 import { setupMenuHandlers, showKeyboardShortcuts } from './menuHandlers.js';
 
+// Use the old require method temporarily
 const { ipcRenderer } = window.require('electron');
 
 // Tab Panel Component
@@ -556,6 +557,13 @@ function LiveCaptions({ captions }) {
 }
 
 function App() {
+  // Debug logging for renderer startup
+  console.log('🚀 App component mounting');
+  console.log('🔍 Available APIs:', {
+    require: !!window.require,
+    ipcRenderer: !!ipcRenderer
+  });
+
   const [transcript, setTranscript] = useState('');
   const [isListening, setIsListening] = useState(false);
   const [viewMode, setViewMode] = useState('audiogram'); // 'transcript', 'captions', 'audiogram'
@@ -647,9 +655,15 @@ function App() {
   useEffect(() => {
     let isMounted = true;
     console.log('Setting up IPC listeners...');
+    console.log('🔍 ipcRenderer available:', !!ipcRenderer);
     
-    // Set up menu handlers
-    setupMenuHandlers();
+    // Set up menu handlers only if ipcRenderer is available
+    try {
+      setupMenuHandlers();
+      console.log('✅ Menu handlers set up successfully');
+    } catch (error) {
+      console.error('❌ Failed to set up menu handlers:', error);
+    }
     
     // Set up custom event listeners for menu actions
     const handleGenerateReport = () => {
@@ -676,10 +690,10 @@ function App() {
     const handleShowAbout = () => {
       setAlert({
         severity: 'info',
-        title: 'About MongoDB Design Review Scribe',
+        title: 'About bitscribe',
         message: `
           <div style="text-align: center;">
-            <h3>MongoDB Design Review Scribe</h3>
+            <h3>bitscribe</h3>
             <p>Version 1.0.0</p>
             <p>AI-powered transcription and analysis tool for MongoDB design reviews</p>
             <br>
@@ -860,6 +874,11 @@ function App() {
     };
 
     // Register all handlers with error handling
+    if (!ipcRenderer) {
+      console.error('❌ ipcRenderer not available, skipping IPC setup');
+      return;
+    }
+    
     try {
       console.log('Registering IPC event handlers...');
       ipcRenderer.on('transcript-update', transcriptHandler);
@@ -2052,10 +2071,10 @@ function App() {
               </Avatar>
               <Box>
                 <Typography variant="h6" sx={{ fontWeight: 700, lineHeight: 1.2 }}>
-                  MongoDB Design Review Scribe
+                  bitscribe
                 </Typography>
                 <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1 }}>
-                  Design Review Analysis
+                  AI Research Assistant
                 </Typography>
               </Box>
             </Box>

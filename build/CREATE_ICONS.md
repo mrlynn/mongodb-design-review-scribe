@@ -1,4 +1,4 @@
-# Creating App Icons for MongoDB Design Review Scribe
+# Creating App Icons for bitscribe
 
 ## Icon Requirements
 
@@ -71,7 +71,7 @@ electron-icon-builder --input=icon.png --output=build/icons
 
 ## Design Suggestions
 
-For a MongoDB Design Review Scribe icon, consider:
+For a bitscribe icon, consider:
 - MongoDB leaf logo (🍃) as the base
 - Add elements suggesting analysis/review (magnifying glass, document, chart)
 - Use MongoDB brand colors:

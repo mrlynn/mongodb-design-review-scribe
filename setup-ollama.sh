@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# MongoDB Design Review Scribe - Ollama Setup Script
-echo "🤖 Setting up Ollama for MongoDB Design Review Scribe..."
+# bitscribe - Ollama Setup Script
+echo "🤖 Setting up Ollama for bitscribe..."
 
 # Colors for output
 GREEN='\033[0;32m'
@@ -12,7 +12,7 @@ NC='\033[0m' # No Color
 
 # Check if we're in the right directory
 if [ ! -f "package.json" ]; then
-    echo -e "${RED}❌ Error: Please run this script from the MongoDB Design Review Scribe root directory${NC}"
+    echo -e "${RED}❌ Error: Please run this script from the bitscribe root directory${NC}"
     exit 1
 fi
 
