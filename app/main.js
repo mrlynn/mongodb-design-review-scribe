@@ -28,6 +28,10 @@ const OllamaManager = require('./services/ollamaManager');
 // Import emergency debugging toolkit
 const BlankingDebugger = require('../debug-toolkit');
 
+// Import menu builders
+const AppMenuBuilder = require('./menu/appMenu');
+const ContextMenuBuilder = require('./menu/contextMenu');
+
 let mainWindow;
 let splashWindow;
 let whisperProc = null;
@@ -124,6 +128,14 @@ function createWindow() {
       experimentalFeatures: true,
     },
   });
+  
+  // Initialize custom app menu
+  const menuBuilder = new AppMenuBuilder(mainWindow);
+  menuBuilder.buildMenu();
+  
+  // Initialize context menu
+  new ContextMenuBuilder(mainWindow);
+  
   mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
   
   // Open DevTools in development

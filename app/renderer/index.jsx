@@ -16,6 +16,7 @@ import remarkGfm from 'remark-gfm';
 
 // Import custom components
 import ErrorBoundary from './components/ErrorBoundary.jsx';
+import { setupMenuHandlers, showKeyboardShortcuts } from './menuHandlers.js';
 
 const { ipcRenderer } = window.require('electron');
 
@@ -647,6 +648,70 @@ function App() {
     let isMounted = true;
     console.log('Setting up IPC listeners...');
     
+    // Set up menu handlers
+    setupMenuHandlers();
+    
+    // Set up custom event listeners for menu actions
+    const handleGenerateReport = () => {
+      if (selectedTemplate) {
+        handleGenerateClick();
+      } else {
+        setShowReportDialog(true);
+      }
+    };
+    
+    const handleShowKeyboardShortcuts = () => {
+      const shortcutsHTML = showKeyboardShortcuts();
+      setAlert({
+        severity: 'info',
+        title: 'Keyboard Shortcuts',
+        message: shortcutsHTML
+      });
+    };
+    
+    const handleToggleCaptions = () => {
+      setCaptionsEnabled(prev => !prev);
+    };
+    
+    const handleShowAbout = () => {
+      setAlert({
+        severity: 'info',
+        title: 'About MongoDB Design Review Scribe',
+        message: `
+          <div style="text-align: center;">
+            <h3>MongoDB Design Review Scribe</h3>
+            <p>Version 1.0.0</p>
+            <p>AI-powered transcription and analysis tool for MongoDB design reviews</p>
+            <br>
+            <p><strong>Features:</strong></p>
+            <ul style="text-align: left; max-width: 400px; margin: 0 auto;">
+              <li>Real-time speech transcription</li>
+              <li>AI-powered conversation analysis</li>
+              <li>MongoDB-specific best practices detection</li>
+              <li>RAG-enhanced insights</li>
+              <li>Professional report generation</li>
+            </ul>
+            <br>
+            <p>© 2025 MongoDB. All rights reserved.</p>
+          </div>
+        `
+      });
+    };
+    
+    // Add event listeners
+    window.addEventListener('generate-report', handleGenerateReport);
+    window.addEventListener('show-keyboard-shortcuts', handleShowKeyboardShortcuts);
+    window.addEventListener('toggle-captions', handleToggleCaptions);
+    window.addEventListener('show-about', handleShowAbout);
+    window.addEventListener('show-settings', () => setShowSettings(true));
+    window.addEventListener('toggle-recording-controls', () => {
+      // Toggle recording controls visibility
+      setAlert({ severity: 'info', message: 'Recording controls toggled' });
+    });
+    window.addEventListener('edit-transcript', () => {
+      setAlert({ severity: 'info', message: 'Transcript editing mode activated' });
+    });
+    
     // Transcript updates with AGGRESSIVE memory management
     const MAX_TRANSCRIPT_LENGTH = 8000; // 8KB limit - FURTHER REDUCED
     const MAX_TRANSCRIPT_LINES = 80; // Max lines - FURTHER REDUCED
@@ -852,6 +917,12 @@ function App() {
         ipcRenderer.removeAllListeners('executive-summary-updated');
         ipcRenderer.removeAllListeners('slides-generated');
         ipcRenderer.removeAllListeners('knowledge-graph-updated');
+        
+        // Clean up custom event listeners
+        window.removeEventListener('generate-report', handleGenerateReport);
+        window.removeEventListener('show-keyboard-shortcuts', handleShowKeyboardShortcuts);
+        window.removeEventListener('toggle-captions', handleToggleCaptions);
+        window.removeEventListener('show-about', handleShowAbout);
       } catch (error) {
         console.error('Error during IPC cleanup:', error);
       }
