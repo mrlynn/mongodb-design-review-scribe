@@ -1,0 +1,71 @@
+{
+  "name": "MongoDB Design Review Report",
+  "description": "Expert MongoDB schema and data model review with actionable recommendations and references.",
+  "category": "Technology",
+  "version": "1.0.0",
+  "icon": "🍃",
+  "prompt": "You are a world-class MongoDB Design Review Assistant. Your job is to review MongoDB data models and schemas, offering actionable feedback and recommendations that align with MongoDB’s best practices.\n\nWhen you begin, always check if the following context is present in the transcript or provided variables. If not, politely prompt for it in your executive summary:\n- Application or business use case overview\n- MongoDB schema(s) and collection structure (ERD or summary)\n- List of common/important queries and update patterns (access patterns)\n- Information about scale (document counts, growth, read/write/query velocities)\n- Any non-obvious business or compliance requirements\n\nTranscript:\n{{transcript}}\n\n{{#if additionalContext}}\nAdditional Context: {{additionalContext}}\n{{/if}}\n\nPlease generate a MongoDB Design Review Report in the following format:\n\n1. Executive Summary\n   - Briefly summarize the review and, if any required context is missing, list what is needed for a more thorough review.\n\n2. What We Heard\n   - Echo back the main discussion topics and customer concerns in clear, simple language.\n   - Summarize the application’s goals and context as understood from the transcript.\n\n3. Issues\n   - Identify issues, antipatterns, or pain points revealed in the transcript.\n   - Explicitly call out patterns that are suboptimal in MongoDB (e.g., overuse of $lookup, unnecessary normalization, large unbounded arrays, excessive collections, etc.).\n   - Flag any risks to scalability, performance, or maintainability.\n\n4. Recommendations\n   - Give direct, prioritized recommendations using MongoDB schema and data modeling best practices.\n   - For each issue, explain why the recommendation is optimal for MongoDB.\n   - Provide improved schema examples or patterns where appropriate.\n   - Prefer embedding, denormalization, and designing around the queries unless there’s a strong reason not to.\n   - Suggest indexing, sharding, data partitioning, or advanced features if relevant (e.g., change streams, schema validation, TTL indexes).\n\n5. References\n   - List official MongoDB documentation links that back up your recommendations.\n   - Link to specific pages, not just the main docs.\n   - Example links:\n     - https://www.mongodb.com/docs/manual/core/data-modeling-introduction/\n     - https://www.mongodb.com/docs/manual/core/schema-design-best-practices/\n     - https://www.mongodb.com/docs/manual/core/aggregation-pipeline/\n     - https://www.mongodb.com/docs/manual/core/indexes/\n     - https://www.mongodb.com/docs/manual/core/sharding/\n     - https://www.mongodb.com/docs/manual/core/changeStreams/\n\nFormat the output in clean markdown with clear headers and formatting. Communicate in a way that’s clear for technical audiences but easy to digest. Do not recommend relational/SQL features or approaches. Do not speculate or make assumptions without first asking clarifying questions.",
+  "variables": [
+    {
+      "name": "additionalContext",
+      "type": "textarea",
+      "label": "Additional Context",
+      "placeholder": "Any additional context about the design review (optional)",
+      "required": false,
+      "default": ""
+    }
+  ],
+  "outputFormat": "markdown",
+  "sections": [
+    {
+      "title": "Executive Summary",
+      "key": "execSummary",
+      "required": true,
+      "description": "Brief summary of the review and any missing context needed for a more thorough review."
+    },
+    {
+      "title": "What We Heard",
+      "key": "whatWeHeard",
+      "required": true,
+      "description": "Main discussion topics, customer concerns, and application context."
+    },
+    {
+      "title": "Issues",
+      "key": "issues",
+      "required": true,
+      "description": "Identified issues, antipatterns, and risks for MongoDB."
+    },
+    {
+      "title": "Recommendations",
+      "key": "recommendations",
+      "required": true,
+      "description": "Actionable, prioritized recommendations with explanations and schema examples."
+    },
+    {
+      "title": "References",
+      "key": "references",
+      "required": true,
+      "description": "Official MongoDB documentation links supporting the recommendations."
+    }
+  ],
+  "metadata": {
+    "author": "Auracle System",
+    "createdAt": "2024-06-01T00:00:00Z",
+    "tags": ["mongodb", "design review", "schema", "data modeling", "technology"],
+    "isDefault": true,
+    "minimumTranscriptLength": 100,
+    "estimatedTokens": 700,
+    "language": "en"
+  },
+  "examples": [
+    {
+      "name": "Sample MongoDB Design Review",
+      "description": "Example review for a SaaS project management app.",
+      "variables": {
+        "additionalContext": "The app is a multi-tenant SaaS for project management. Each customer has their own set of projects, tasks, and users."
+      },
+      "sampleTranscript": "We currently have a 'users' collection, a 'projects' collection, and a 'tasks' collection. Each task references a projectId and an assigned userId. We use $lookup to join tasks with users for reporting. The largest collection is 'tasks' with about 2 million documents. We expect this to grow by 10% per month. Some customers want to keep deleted tasks for audit purposes. We sometimes see slow queries when filtering tasks by project and status.",
+      "expectedOutput": "# MongoDB Design Review Report\n\n## Executive Summary\nThis review analyzes the current MongoDB schema for a multi-tenant SaaS project management app. For a more thorough review, please provide: a sample ERD, typical query patterns, and any compliance requirements.\n\n## What We Heard\n- The application manages users, projects, and tasks for multiple customers.\n- Tasks reference projects and users.\n- $lookup is used for reporting.\n- Task collection is large and growing.\n- Some customers require audit trails.\n- Occasional slow queries on tasks.\n\n## Issues\n- Frequent use of $lookup for reporting may impact performance at scale.\n- Large, unbounded 'tasks' collection could lead to index bloat and slow queries.\n- No mention of schema validation or TTL for audit data.\n\n## Recommendations\n- Consider embedding user/project info in tasks for common queries to reduce $lookup usage.\n- Use schema validation to enforce document structure.\n- Implement TTL indexes for audit data if appropriate.\n- Review and optimize indexes for frequent queries (e.g., projectId + status).\n- Monitor collection size and consider sharding if growth continues.\n\n## References\n- [Data Modeling Introduction](https://www.mongodb.com/docs/manual/core/data-modeling-introduction/)\n- [Schema Design Best Practices](https://www.mongodb.com/docs/manual/core/schema-design-best-practices/)\n- [Aggregation Pipeline](https://www.mongodb.com/docs/manual/core/aggregation-pipeline/)\n- [Indexes](https://www.mongodb.com/docs/manual/core/indexes/)\n- [Sharding](https://www.mongodb.com/docs/manual/core/sharding/)\n- [Change Streams](https://www.mongodb.com/docs/manual/core/changeStreams/)\n"
+    }
+  ]
+} 
