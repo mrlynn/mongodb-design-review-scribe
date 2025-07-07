@@ -31,11 +31,6 @@ extraResources:
 mac:
   category: public.app-category.productivity
   icon: build/icons/mac/icon.icns
-  hardenedRuntime: true
-  gatekeeperAssess: false
-  entitlements: build/entitlements.mac.plist
-  entitlementsInherit: build/entitlements.mac.plist
-  type: distribution
   target:
     - target: dmg
       arch: [x64, arm64]
@@ -45,7 +40,6 @@ mac:
 dmg:
   title: "${productName} ${version}"
   icon: build/icons/mac/icon.icns
-  background: build/dmg-background.png
   contents:
     - x: 130
       y: 220
@@ -111,6 +105,3 @@ deb:
 publish:
   provider: github
   releaseType: release
-
-afterPack: scripts/afterPack.js
-afterSign: scripts/notarize.js
