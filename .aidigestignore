@@ -1,0 +1,7 @@
+dist
+node_modules
+build
+data
+Fav*
+.git
+whisper.cpp

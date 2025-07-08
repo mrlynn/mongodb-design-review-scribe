@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, powerSaveBlocker } = require('electron');
+const { app, BrowserWindow, ipcMain, powerSaveBlocker, dialog } = require('electron');
 
 // 🚨 EMERGENCY: Increase memory limit for stability but add monitoring
 app.commandLine.appendSwitch('max-old-space-size', '2048'); // Increase to 2GB for stability
@@ -9,6 +9,7 @@ const EmergencyDebugger = require('../debug-emergency');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const { execSync } = require('child_process');
 const stt = require('./services/stt');
 const processor = require('./services/processor');
 const { testConnection: testLLMConnection } = require('./services/llmProviders');
@@ -448,7 +449,7 @@ ipcMain.handle('splash-update-status', (event, status) => {
 });
 
 // IPC: Start transcription
-ipcMain.on('start-transcription', (event) => {
+ipcMain.on('start-transcription', async (event) => {
   if (whisperProc) return; // Already running
   
   // Prevent system sleep during recording
@@ -471,10 +472,17 @@ ipcMain.on('start-transcription', (event) => {
   // Clear processor
   processor.clear();
   
-  whisperProc = stt.startTranscription((data) => {
+  // Get audio device from settings
+  const config = loadConfig();
+  const audioDevice = config?.audioDevice;
+  
+  whisperProc = await stt.startTranscription((data) => {
+    console.log('🎤 Main: Received transcript data:', data);
+    
     // Handle new structured transcript data
     if (typeof data === 'string') {
       // Legacy format for backward compatibility
+      console.log('🎤 Main: Sending legacy format transcript-update to renderer:', data);
       mainWindow.webContents.send('transcript-update', data);
       if (currentSession) {
         currentSession.transcript.push({
@@ -485,6 +493,7 @@ ipcMain.on('start-transcription', (event) => {
       processor.addTranscript(data);
     } else if (data.type === 'final') {
       // Final committed text
+      console.log('🎤 Main: Sending final transcript-update to renderer:', data.text);
       mainWindow.webContents.send('transcript-update', { type: 'final', text: data.text });
       if (currentSession) {
         currentSession.transcript.push({
@@ -496,13 +505,36 @@ ipcMain.on('start-transcription', (event) => {
       processor.addTranscript(data.text);
     } else if (data.type === 'interim') {
       // Interim text (don't save to session, just display)
+      console.log('🎤 Main: Sending interim transcript-update to renderer:', data.text);
       mainWindow.webContents.send('transcript-update', { type: 'interim', text: data.text });
     } else if (data.type === 'error' || data.type === 'system') {
       // System messages
+      console.log('🎤 Main: Sending system/error transcript-update to renderer:', data.text);
       mainWindow.webContents.send('transcript-update', { type: data.type, text: data.text });
     }
-  });
+  }, audioDevice);
   
+});
+
+// IPC: Process uploaded transcript
+ipcMain.on('process-transcript', (event, transcriptContent) => {
+  console.log('📄 Processing uploaded transcript:', transcriptContent.length, 'characters');
+  
+  // Add to processor for topic extraction and insights
+  processor.addTranscript(transcriptContent);
+  
+  // Create a mock session for the uploaded transcript
+  if (!currentSession) {
+    currentSession = {
+      id: Date.now().toString(),
+      startTime: new Date().toISOString(),
+      transcript: [transcriptContent],
+      topics: [],
+      research: []
+    };
+  } else {
+    currentSession.transcript.push(transcriptContent);
+  }
 });
 
 // IPC: Handle renderer errors
@@ -1472,6 +1504,96 @@ ipcMain.handle('get-recent-insights', async (_, limit = 10) => {
   } catch (error) {
     console.error('Error getting recent insights:', error);
     return { error: error.message };
+  }
+});
+
+// Audio Device IPC Handler
+ipcMain.handle('get-audio-devices', async () => {
+  try {
+    // Execute ffmpeg to get device list
+    const output = execSync('ffmpeg -f avfoundation -list_devices true -i ""', { encoding: 'utf8' });
+    return { success: true, devices: [] }; // ffmpeg lists devices in stderr
+  } catch (error) {
+    // FFmpeg lists devices in stderr when it "fails"
+    const stderr = error.stderr || '';
+    const devices = [];
+    
+    // Parse audio devices from stderr
+    const lines = stderr.split('\n');
+    let inAudioSection = false;
+    
+    for (const line of lines) {
+      if (line.includes('AVFoundation audio devices:')) {
+        inAudioSection = true;
+        continue;
+      }
+      if (inAudioSection && line.includes('[') && line.includes(']')) {
+        const match = line.match(/\[(\d+)\]\s+(.+)/);
+        if (match) {
+          devices.push({
+            index: parseInt(match[1]),
+            name: match[2].trim()
+          });
+        }
+      }
+    }
+    
+    return { success: true, devices };
+  }
+});
+
+// File Upload IPC Handlers
+ipcMain.handle('upload-audio-file', async () => {
+  try {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: 'Select Audio File',
+      filters: [
+        { name: 'Audio Files', extensions: ['mp3', 'wav', 'mp4', 'm4a', 'ogg', 'flac'] },
+        { name: 'All Files', extensions: ['*'] }
+      ],
+      properties: ['openFile']
+    });
+
+    if (result.canceled) {
+      return { success: false, canceled: true };
+    }
+
+    const filePath = result.filePaths[0];
+    console.log('Selected audio file:', filePath);
+    
+    // TODO: Process the audio file with whisper
+    return { success: true, filePath };
+  } catch (error) {
+    console.error('Error selecting audio file:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('upload-transcript-file', async () => {
+  try {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: 'Select Transcript File',
+      filters: [
+        { name: 'Text Files', extensions: ['txt', 'md', 'rtf'] },
+        { name: 'Document Files', extensions: ['docx', 'pdf'] },
+        { name: 'All Files', extensions: ['*'] }
+      ],
+      properties: ['openFile']
+    });
+
+    if (result.canceled) {
+      return { success: false, canceled: true };
+    }
+
+    const filePath = result.filePaths[0];
+    console.log('Selected transcript file:', filePath);
+    
+    // Read and return file content
+    const content = fs.readFileSync(filePath, 'utf8');
+    return { success: true, filePath, content };
+  } catch (error) {
+    console.error('Error reading transcript file:', error);
+    return { success: false, error: error.message };
   }
 });
 

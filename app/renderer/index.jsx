@@ -351,7 +351,7 @@ function Audiogram({ isListening }) {
               // Voice activity detection based on amplitude and frequency content
               const rms = Math.sqrt(timeDomainArray.reduce((sum, val) => sum + Math.pow((val - 128) / 128, 2), 0) / timeDomainArray.length);
               const highFreqEnergy = spectrum.slice(6, 12).reduce((sum, val) => sum + val, 0) / 6;
-              const isVoiceActive = rms > 0.01 && highFreqEnergy > 0.1;
+              const isVoiceActive = rms > 0.003 && highFreqEnergy > 0.03;
               
               setSpectrumData(spectrum);
               setVoiceActivity(isVoiceActive);
@@ -395,7 +395,7 @@ function Audiogram({ isListening }) {
     
     return () => {
       if (realAudioLevels) {
-        if (realAudioLevels.audioContext) {
+        if (realAudioLevels.audioContext && realAudioLevels.audioContext.state !== 'closed') {
           realAudioLevels.audioContext.close();
         }
         if (realAudioLevels.stream) {
@@ -451,7 +451,7 @@ function Audiogram({ isListening }) {
             key={index}
             sx={{
               width: 14,
-              height: `${Math.max(2, amplitude * 80)}px`,
+              height: `${Math.max(2, amplitude * 200)}px`,
               backgroundColor: isListening 
                 ? (voiceActivity 
                     ? (index >= 2 && index <= 8 ? '#13AA52' : '#1CC45F') // Highlight speech frequencies
@@ -460,7 +460,7 @@ function Audiogram({ isListening }) {
                 : '#E2E8F0',
               borderRadius: 1,
               transition: 'all 0.15s ease',
-              opacity: amplitude > 0.1 ? 1 : 0.5
+              opacity: amplitude > 0.02 ? 1 : 0.3
             }}
           />
         ))}
@@ -583,6 +583,10 @@ function App() {
   const [activeTab, setActiveTab] = useState(0);
   const [testingConnection, setTestingConnection] = useState(false);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'info' });
+  
+  // Audio device state
+  const [audioDevices, setAudioDevices] = useState([]);
+  const [selectedAudioDevice, setSelectedAudioDevice] = useState(null);
   
   // Metrics state
   const [usageMetrics, setUsageMetrics] = useState(null);
@@ -733,6 +737,8 @@ function App() {
     
     const transcriptHandler = (_, data) => {
       if (!isMounted) return; // Prevent updates after unmount
+      
+      console.log('🎤 Renderer: Received transcript-update:', data);
       
       if (typeof data === 'string') {
         // Legacy format
@@ -1209,8 +1215,21 @@ function App() {
     try {
       const config = await ipcRenderer.invoke('get-settings');
       const providers = await ipcRenderer.invoke('get-llm-providers');
+      const devicesResult = await ipcRenderer.invoke('get-audio-devices');
+      
       setSettings(config);
       setLlmProviders(providers);
+      
+      if (devicesResult.success && devicesResult.devices) {
+        setAudioDevices(devicesResult.devices);
+        // Set selected device from settings or default to first device
+        const savedDevice = config?.audioDevice;
+        if (savedDevice !== undefined) {
+          setSelectedAudioDevice(savedDevice);
+        } else if (devicesResult.devices.length > 0) {
+          setSelectedAudioDevice(devicesResult.devices[0].index);
+        }
+      }
     } catch (error) {
       console.error('Failed to load settings:', error);
     }
@@ -1493,6 +1512,74 @@ function App() {
       setSnackbar({ open: true, message: 'Failed to generate report', severity: 'error' });
     } finally {
       setGeneratingReport(false);
+    }
+  };
+
+  // File Upload Functions
+  const handleFileUpload = async () => {
+    try {
+      // Show a dialog to choose file type
+      const audioResult = await ipcRenderer.invoke('upload-audio-file');
+      
+      if (audioResult.success && !audioResult.canceled) {
+        setSnackbar({ 
+          open: true, 
+          message: `Processing audio file: ${audioResult.filePath}`, 
+          severity: 'info' 
+        });
+        
+        // TODO: Process audio file with whisper
+        // For now, just show success
+        setSnackbar({ 
+          open: true, 
+          message: 'Audio file upload feature coming soon!', 
+          severity: 'info' 
+        });
+      }
+    } catch (error) {
+      console.error('Error uploading file:', error);
+      setSnackbar({ 
+        open: true, 
+        message: 'Failed to upload file', 
+        severity: 'error' 
+      });
+    }
+  };
+
+  const handleTranscriptUpload = async () => {
+    try {
+      const result = await ipcRenderer.invoke('upload-transcript-file');
+      
+      if (result.success && !result.canceled) {
+        // Set the transcript content
+        setTranscript(result.content);
+        setSnackbar({ 
+          open: true, 
+          message: `Transcript loaded. Processing with AI...`, 
+          severity: 'info' 
+        });
+        
+        // Process with AI via IPC (this will trigger topic extraction and insights)
+        ipcRenderer.send('process-transcript', result.content);
+        
+        // Trigger immediate research for extracted topics
+        setTimeout(() => {
+          ipcRenderer.send('trigger-research', result.content);
+        }, 2000); // Wait 2 seconds for topics to be extracted
+        
+        setSnackbar({ 
+          open: true, 
+          message: `Processing complete! Topics and insights will appear shortly.`, 
+          severity: 'success' 
+        });
+      }
+    } catch (error) {
+      console.error('Error uploading transcript:', error);
+      setSnackbar({ 
+        open: true, 
+        message: 'Failed to upload transcript', 
+        severity: 'error' 
+      });
     }
   };
 
@@ -2060,18 +2147,18 @@ function App() {
         }}>
           <Toolbar sx={{ py: 1 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flex: 1 }}>
-              <Avatar sx={{ 
-                backgroundColor: '#13AA52',
-                width: 40,
-                height: 40,
-                fontSize: '18px',
-                fontWeight: 'bold'
-              }}>
-                M
-              </Avatar>
+              <img 
+                src="./build/icon.png" 
+                alt="bitscribe icon"
+                style={{ 
+                  width: 40,
+                  height: 40,
+                  borderRadius: '50%'
+                }} 
+              />
               <Box>
                 <Typography variant="h6" sx={{ fontWeight: 700, lineHeight: 1.2 }}>
-                  bitscribe
+                  Bitscribe
                 </Typography>
                 <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1 }}>
                   AI Research Assistant
@@ -2163,7 +2250,7 @@ function App() {
           </Toolbar>
         </AppBar>
 
-        {/* Main Content Area with New Layout */}
+        {/* Main Content Area with Improved Layout */}
         <Box sx={{ flex: 1, display: 'flex', position: 'relative', zIndex: 1, overflow: 'hidden' }}>
           {!ollamaConnected && (
             <Fade in={!ollamaConnected}>
@@ -2185,6 +2272,127 @@ function App() {
               </Alert>
             </Fade>
           )}
+          
+          {/* Welcome/Empty State */}
+          {!isListening && transcript.length === 0 && topics.length === 0 && (
+            <Box sx={{ 
+              flex: 1, 
+              display: 'flex', 
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              p: 4,
+              gap: 4
+            }}>
+              <Box sx={{ textAlign: 'center', maxWidth: 600 }}>
+                <Typography variant="h3" sx={{ fontWeight: 700, mb: 2 }}>
+                  Welcome to Bitscribe
+                </Typography>
+                <Typography variant="h6" color="text.secondary" sx={{ mb: 6 }}>
+                  Your AI-powered conversation assistant. Start transcribing or upload audio files to begin.
+                </Typography>
+                
+                {/* Primary Actions */}
+                <Stack direction="row" spacing={3} justifyContent="center" sx={{ mb: 4 }}>
+                  <Button
+                    variant="contained"
+                    size="large"
+                    startIcon={<span>🎤</span>}
+                    onClick={() => ipcRenderer.send('start-transcription')}
+                    sx={{ 
+                      px: 4,
+                      py: 1.5,
+                      fontSize: '1.1rem',
+                      background: 'linear-gradient(135deg, #13AA52 0%, #1CC45F 100%)',
+                      '&:hover': {
+                        background: 'linear-gradient(135deg, #0E7C3A 0%, #13AA52 100%)',
+                      }
+                    }}
+                  >
+                    Start Recording
+                  </Button>
+                  
+                  <Stack direction="row" spacing={1}>
+                    <Button
+                      variant="outlined"
+                      size="large"
+                      startIcon={<span>🎵</span>}
+                      onClick={handleFileUpload}
+                      sx={{ 
+                        px: 3,
+                        py: 1.5,
+                        fontSize: '1rem',
+                        borderColor: '#13AA52',
+                        color: '#13AA52',
+                        '&:hover': {
+                          borderColor: '#0E7C3A',
+                          color: '#0E7C3A',
+                          backgroundColor: 'rgba(19, 170, 82, 0.04)'
+                        }
+                      }}
+                    >
+                      Upload Audio
+                    </Button>
+                    <Button
+                      variant="outlined"
+                      size="large"
+                      startIcon={<span>📄</span>}
+                      onClick={handleTranscriptUpload}
+                      sx={{ 
+                        px: 3,
+                        py: 1.5,
+                        fontSize: '1rem',
+                        borderColor: '#13AA52',
+                        color: '#13AA52',
+                        '&:hover': {
+                          borderColor: '#0E7C3A',
+                          color: '#0E7C3A',
+                          backgroundColor: 'rgba(19, 170, 82, 0.04)'
+                        }
+                      }}
+                    >
+                      Upload Text
+                    </Button>
+                  </Stack>
+                </Stack>
+                
+                {/* Features */}
+                <Grid container spacing={3} sx={{ mt: 4, maxWidth: 800, mx: 'auto' }}>
+                  <Grid item xs={12} sm={4}>
+                    <Card sx={{ p: 3, textAlign: 'center', height: '100%' }}>
+                      <Typography variant="h2" sx={{ mb: 1 }}>🎯</Typography>
+                      <Typography variant="h6" sx={{ mb: 1 }}>Real-time Transcription</Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Accurate speech-to-text with live captions
+                      </Typography>
+                    </Card>
+                  </Grid>
+                  <Grid item xs={12} sm={4}>
+                    <Card sx={{ p: 3, textAlign: 'center', height: '100%' }}>
+                      <Typography variant="h2" sx={{ mb: 1 }}>🧠</Typography>
+                      <Typography variant="h6" sx={{ mb: 1 }}>AI Analysis</Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Extract topics, insights, and summaries
+                      </Typography>
+                    </Card>
+                  </Grid>
+                  <Grid item xs={12} sm={4}>
+                    <Card sx={{ p: 3, textAlign: 'center', height: '100%' }}>
+                      <Typography variant="h2" sx={{ mb: 1 }}>📊</Typography>
+                      <Typography variant="h6" sx={{ mb: 1 }}>Smart Reports</Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Generate professional meeting reports
+                      </Typography>
+                    </Card>
+                  </Grid>
+                </Grid>
+              </Box>
+            </Box>
+          )}
+          
+          {/* Main Interface - Show only when there's content */}
+          {(isListening || transcript.length > 0 || topics.length > 0) && (
+            <>
 
           {/* Left Panel: Conversation Topics */}
           <Box sx={{ 
@@ -2843,6 +3051,95 @@ function App() {
               </Box>
             </Box>
           </Box>
+            </>
+          )}
+        </Box>
+
+        {/* Floating Action Area - Always Visible */}
+        <Box sx={{ 
+          position: 'fixed',
+          bottom: 24,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 2,
+          zIndex: 1000,
+          backgroundColor: 'white',
+          borderRadius: 4,
+          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.12)',
+          p: 2,
+          border: '1px solid rgba(0, 0, 0, 0.08)'
+        }}>
+          {/* Main Record Button */}
+          <Fab
+            color="primary"
+            size="large"
+            onClick={isListening ? stopTranscription : startTranscription}
+            sx={{ 
+              width: 64,
+              height: 64,
+              backgroundColor: isListening ? '#D32F2F' : '#13AA52',
+              '&:hover': {
+                backgroundColor: isListening ? '#B71C1C' : '#0E7C3A',
+              }
+            }}
+          >
+            <Typography variant="h4">
+              {isListening ? '⏹' : '🎤'}
+            </Typography>
+          </Fab>
+          
+          {/* Secondary Actions */}
+          <Stack direction="row" spacing={1}>
+            <Button
+              variant="contained"
+              startIcon={<span>📁</span>}
+              disabled={isListening}
+              onClick={handleFileUpload}
+              sx={{ 
+                backgroundColor: '#F5F7FA',
+                color: '#1A1A1A',
+                '&:hover': {
+                  backgroundColor: '#E8EAEE',
+                }
+              }}
+            >
+              Upload File
+            </Button>
+            
+            {transcript.length > 50 && !isListening && (
+              <Button
+                variant="contained"
+                startIcon={<span>📊</span>}
+                onClick={generateQuickReport}
+                sx={{ 
+                  background: 'linear-gradient(135deg, #13AA52 0%, #1CC45F 100%)',
+                  '&:hover': {
+                    background: 'linear-gradient(135deg, #0E7C3A 0%, #13AA52 100%)',
+                  }
+                }}
+              >
+                Generate Report
+              </Button>
+            )}
+          </Stack>
+          
+          {/* Recording Status */}
+          {isListening && (
+            <Chip 
+              label="🔴 RECORDING" 
+              sx={{ 
+                backgroundColor: '#D32F2F',
+                color: 'white',
+                fontWeight: 600,
+                animation: 'pulse 2s infinite',
+                fontSize: '14px',
+                px: 2,
+                height: 32
+              }}
+            />
+          )}
         </Box>
 
         {/* Settings and Other Dialogs */}
@@ -2912,6 +3209,36 @@ function App() {
                         <ListItemSecondaryAction>
                           <Switch checked={true} disabled />
                         </ListItemSecondaryAction>
+                      </ListItem>
+                      <ListItem>
+                        <ListItemText 
+                          primary="Audio Input Device"
+                          secondary="Select the microphone to use for transcription"
+                        />
+                        <FormControl sx={{ minWidth: 200, mt: 1, mb: 1 }}>
+                          <Select
+                            value={selectedAudioDevice || ''}
+                            onChange={(e) => {
+                              const deviceIndex = parseInt(e.target.value);
+                              setSelectedAudioDevice(deviceIndex);
+                              handleSettingsUpdate({
+                                ...settings,
+                                audioDevice: deviceIndex
+                              });
+                            }}
+                            size="small"
+                            displayEmpty
+                          >
+                            <MenuItem value="" disabled>
+                              <em>Select a device</em>
+                            </MenuItem>
+                            {audioDevices.map(device => (
+                              <MenuItem key={device.index} value={device.index}>
+                                {device.name}
+                              </MenuItem>
+                            ))}
+                          </Select>
+                        </FormControl>
                       </ListItem>
                     </List>
                   </Box>
