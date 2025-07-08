@@ -26,7 +26,10 @@ extraResources:
     filter: ["**/*.bin"]
   - from: whisper.cpp/build/bin/
     to: bin/
-    filter: ["whisper-stream*", "whisper*"]
+    filter: ["whisper-cli", "main", "whisper"]
+
+# Ensure binaries are executable
+afterPack: ./scripts/afterPack.js
 
 mac:
   category: public.app-category.productivity
@@ -102,6 +105,6 @@ deb:
     - libxss1
     - libgconf-2-4
 
-publish:
-  provider: github
-  releaseType: release
+# publish:
+#   provider: github
+#   releaseType: release

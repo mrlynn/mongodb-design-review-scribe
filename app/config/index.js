@@ -3,7 +3,25 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const configDir = path.join(os.homedir(), '.research-companion');
+// Try to use Electron's app module if available
+let app;
+try {
+  app = require('electron').app;
+} catch (e) {
+  // Not in Electron context
+}
+
+const getConfigDir = () => {
+  if (app && app.getPath) {
+    // Production: use app's userData directory
+    return app.getPath('userData');
+  } else {
+    // Development/fallback: use home directory
+    return path.join(os.homedir(), '.bitscribe');
+  }
+};
+
+const configDir = getConfigDir();
 const configFile = path.join(configDir, 'config.json');
 
 function loadConfig() {

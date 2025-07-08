@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Speaker Detection Transcript Display Test</title>
+    <style>
+        body {
+            font-family: 'Inter', 'Helvetica Neue', Arial, sans-serif;
+            background: #f5f5f5;
+            padding: 20px;
+            margin: 0;
+        }
+        .transcript-container {
+            background: #F8F9FA;
+            padding: 16px;
+            border-radius: 8px;
+            max-width: 800px;
+            margin: 20px auto;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .speaker-line {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 8px;
+            align-items: flex-start;
+        }
+        .speaker-chip {
+            background: #13AA52;
+            color: white;
+            font-size: 11px;
+            padding: 2px 8px;
+            border-radius: 12px;
+            min-width: 70px;
+            text-align: center;
+            font-weight: 600;
+            flex-shrink: 0;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .speaker-1 { background: #13AA52; }
+        .speaker-2 { background: #0084FF; }
+        .speaker-3 { background: #FF6B35; }
+        .speaker-4 { background: #8B5CF6; }
+        .speaker-5 { background: #EC4899; }
+        .speaker-6 { background: #10B981; }
+        .text-content {
+            flex: 1;
+            font-size: 14px;
+            line-height: 1.6;
+            color: #1A1A1A;
+        }
+        .regular-line {
+            font-family: monospace;
+            font-size: 14px;
+            line-height: 1.6;
+            color: #1A1A1A;
+            margin-bottom: 8px;
+        }
+        h2 {
+            color: #13AA52;
+            margin-top: 30px;
+            margin-bottom: 15px;
+        }
+        .test-info {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border-left: 4px solid #13AA52;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-info">
+        <h1>🎭 Speaker Detection Transcript Display Test</h1>
+        <p>This page shows how the speaker detection UI should look in the Bitscribe app.</p>
+    </div>
+
+    <h2>Without Speaker Detection:</h2>
+    <div class="transcript-container">
+        <div class="regular-line">Hello, welcome to today's meeting.</div>
+        <div class="regular-line">We're going to discuss the quarterly budget.</div>
+        <div class="regular-line">I think we should increase marketing spend by 20%.</div>
+        <div class="regular-line">That sounds like a good idea to me.</div>
+        <div class="regular-line">Let's also talk about hiring new developers.</div>
+    </div>
+
+    <h2>With Speaker Detection:</h2>
+    <div class="transcript-container">
+        <div class="speaker-line">
+            <div class="speaker-chip speaker-1">Speaker 1</div>
+            <div class="text-content">Hello, welcome to today's meeting.</div>
+        </div>
+        <div class="speaker-line">
+            <div class="speaker-chip speaker-1">Speaker 1</div>
+            <div class="text-content">We're going to discuss the quarterly budget.</div>
+        </div>
+        <div class="speaker-line">
+            <div class="speaker-chip speaker-2">Speaker 2</div>
+            <div class="text-content">I think we should increase marketing spend by 20%.</div>
+        </div>
+        <div class="speaker-line">
+            <div class="speaker-chip speaker-1">Speaker 1</div>
+            <div class="text-content">That sounds like a good idea to me.</div>
+        </div>
+        <div class="speaker-line">
+            <div class="speaker-chip speaker-3">Speaker 3</div>
+            <div class="text-content">Let's also talk about hiring new developers.</div>
+        </div>
+        <div class="speaker-line">
+            <div class="speaker-chip speaker-2">Speaker 2</div>
+            <div class="text-content">How many developers are we thinking of hiring?</div>
+        </div>
+        <div class="speaker-line">
+            <div class="speaker-chip speaker-1">Speaker 1</div>
+            <div class="text-content">I'd say we need at least two senior developers.</div>
+        </div>
+        <div class="speaker-line">
+            <div class="speaker-chip speaker-3">Speaker 3</div>
+            <div class="text-content">And maybe one junior developer for mentoring.</div>
+        </div>
+    </div>
+
+    <h2>Mixed Format (Regular + Speakers):</h2>
+    <div class="transcript-container">
+        <div class="speaker-line">
+            <div class="speaker-chip speaker-1">Speaker 1</div>
+            <div class="text-content">This is the first speaker.</div>
+        </div>
+        <div class="regular-line">Regular line without speaker.</div>
+        <div class="speaker-line">
+            <div class="speaker-chip speaker-2">Speaker 2</div>
+            <div class="text-content">This is the second speaker.</div>
+        </div>
+        <div class="regular-line">Another regular line.</div>
+        <div class="speaker-line">
+            <div class="speaker-chip speaker-1">Speaker 1</div>
+            <div class="text-content">Back to the first speaker.</div>
+        </div>
+        <div class="speaker-line">
+            <div class="speaker-chip speaker-4">Speaker 4</div>
+            <div class="text-content">A fourth speaker joins the conversation.</div>
+        </div>
+    </div>
+
+    <h2>All Speaker Colors:</h2>
+    <div class="transcript-container">
+        <div class="speaker-line">
+            <div class="speaker-chip speaker-1">Speaker 1</div>
+            <div class="text-content">Green color (#13AA52)</div>
+        </div>
+        <div class="speaker-line">
+            <div class="speaker-chip speaker-2">Speaker 2</div>
+            <div class="text-content">Blue color (#0084FF)</div>
+        </div>
+        <div class="speaker-line">
+            <div class="speaker-chip speaker-3">Speaker 3</div>
+            <div class="text-content">Orange color (#FF6B35)</div>
+        </div>
+        <div class="speaker-line">
+            <div class="speaker-chip speaker-4">Speaker 4</div>
+            <div class="text-content">Purple color (#8B5CF6)</div>
+        </div>
+        <div class="speaker-line">
+            <div class="speaker-chip speaker-5">Speaker 5</div>
+            <div class="text-content">Pink color (#EC4899)</div>
+        </div>
+        <div class="speaker-line">
+            <div class="speaker-chip speaker-6">Speaker 6</div>
+            <div class="text-content">Emerald color (#10B981)</div>
+        </div>
+    </div>
+
+    <div class="test-info">
+        <h3>✅ Visual Test Checklist:</h3>
+        <ul>
+            <li>Speaker chips are properly aligned with text</li>
+            <li>Each speaker has a distinct color</li>
+            <li>Text is readable and properly spaced</li>
+            <li>Mixed format works (regular lines + speaker lines)</li>
+            <li>Colors cycle properly for speakers 1-6</li>
+        </ul>
+    </div>
+</body>
+</html>

@@ -1,11 +1,22 @@
-// Local Storage (stub)
-// TODO: Replace with MongoDB in the future
+// Local Storage
 const fs = require('fs');
 const path = require('path');
+const { app } = require('electron');
 
-const dataDir = path.join(__dirname, '../../data');
+// Use Electron's app data directory for production
+const getDataDir = () => {
+  if (app && app.getPath) {
+    // Production: use user data directory
+    return path.join(app.getPath('userData'), 'sessions');
+  } else {
+    // Fallback for when app is not available (e.g., in tests)
+    return path.join(__dirname, '../../data');
+  }
+};
+
+const dataDir = getDataDir();
 if (!fs.existsSync(dataDir)) {
-  fs.mkdirSync(dataDir);
+  fs.mkdirSync(dataDir, { recursive: true });
 }
 
 function saveSession(session) {

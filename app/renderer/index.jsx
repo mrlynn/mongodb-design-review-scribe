@@ -598,6 +598,18 @@ function App() {
   const [loadingTemplates, setLoadingTemplates] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState(null);
   const [templateDialog, setTemplateDialog] = useState({ open: false, mode: 'view', template: null });
+  const [templateEditor, setTemplateEditor] = useState({ 
+    open: false, 
+    mode: 'create', // 'create', 'edit', 'view'
+    template: null 
+  });
+  const [editingTemplate, setEditingTemplate] = useState({
+    name: '',
+    description: '',
+    category: 'General',
+    prompt: '',
+    icon: '📄'
+  });
   const [showTemplateSelection, setShowTemplateSelection] = useState(false);
   const [generatingReport, setGeneratingReport] = useState(false);
   
@@ -623,6 +635,12 @@ function App() {
   const [executiveSummary, setExecutiveSummary] = useState('');
   const [currentSlides, setCurrentSlides] = useState([]);
   const [knowledgeGraph, setKnowledgeGraph] = useState(null);
+  
+  // Model downloader state
+  const [diarizationModels, setDiarizationModels] = useState(null);
+  const [loadingModels, setLoadingModels] = useState(false);
+  const [downloadingModel, setDownloadingModel] = useState(null);
+  const [downloadProgress, setDownloadProgress] = useState(null);
   const [showInsightsPanel, setShowInsightsPanel] = useState(true);
 
   // RAG state
@@ -784,7 +802,9 @@ function App() {
         // Add to captions for live view
         setRecentCaptions(prev => {
           const newCaptions = [...prev, { 
-            text: data.text, 
+            text: data.text,
+            speaker: data.speaker,
+            hasSpeaker: data.hasSpeaker,
             timestamp: Date.now() 
           }];
           // Keep only last 5 captions for memory efficiency
@@ -1776,6 +1796,209 @@ function App() {
     }
   };
 
+  // Template management handlers
+  const handleSaveTemplate = async () => {
+    if (!editingTemplate?.name || !editingTemplate?.description || !editingTemplate?.prompt) {
+      setSnackbar({ open: true, message: 'Please fill in all required fields', severity: 'error' });
+      return;
+    }
+
+    try {
+      const templateData = {
+        name: editingTemplate.name,
+        description: editingTemplate.description,
+        category: editingTemplate.category || 'Custom',
+        icon: editingTemplate.icon || '📄',
+        prompt: editingTemplate.prompt,
+        variables: editingTemplate.variables || [],
+        version: '1.0.0',
+        outputFormat: 'markdown',
+        metadata: {
+          author: 'User',
+          createdAt: new Date().toISOString(),
+          isDefault: false
+        }
+      };
+
+      if (templateEditor.mode === 'create') {
+        const result = await ipcRenderer.invoke('create-template', templateData);
+        if (result.success) {
+          setSnackbar({ open: true, message: 'Template created successfully', severity: 'success' });
+          loadTemplates();
+          setTemplateEditor({ open: false, mode: 'create', template: null });
+          setEditingTemplate(null);
+        } else {
+          setSnackbar({ open: true, message: 'Failed to create template', severity: 'error' });
+        }
+      } else if (templateEditor.mode === 'edit') {
+        const result = await ipcRenderer.invoke('update-template', templateEditor.template._id, templateData);
+        if (result.success) {
+          setSnackbar({ open: true, message: 'Template updated successfully', severity: 'success' });
+          loadTemplates();
+          setTemplateEditor({ open: false, mode: 'create', template: null });
+          setEditingTemplate(null);
+        } else {
+          setSnackbar({ open: true, message: 'Failed to update template', severity: 'error' });
+        }
+      }
+    } catch (error) {
+      console.error('Failed to save template:', error);
+      setSnackbar({ open: true, message: 'Failed to save template', severity: 'error' });
+    }
+  };
+
+  const handleDeleteTemplate = async (templateId) => {
+    if (confirm('Are you sure you want to delete this template? This action cannot be undone.')) {
+      try {
+        const result = await ipcRenderer.invoke('delete-template', templateId);
+        if (result.success) {
+          setSnackbar({ open: true, message: 'Template deleted successfully', severity: 'success' });
+          loadTemplates();
+        } else {
+          setSnackbar({ open: true, message: 'Failed to delete template', severity: 'error' });
+        }
+      } catch (error) {
+        console.error('Failed to delete template:', error);
+        setSnackbar({ open: true, message: 'Failed to delete template', severity: 'error' });
+      }
+    }
+  };
+
+  const handleTemplateImport = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    try {
+      const text = await file.text();
+      const result = await ipcRenderer.invoke('import-template', text);
+      if (result.success) {
+        setSnackbar({ open: true, message: 'Template imported successfully', severity: 'success' });
+        loadTemplates();
+      } else {
+        setSnackbar({ open: true, message: result.error || 'Failed to import template', severity: 'error' });
+      }
+    } catch (error) {
+      console.error('Failed to import template:', error);
+      setSnackbar({ open: true, message: 'Failed to import template', severity: 'error' });
+    }
+    
+    // Clear the file input
+    event.target.value = '';
+  };
+
+  // Initialize editing template when template editor opens
+  useEffect(() => {
+    if (templateEditor.open && templateEditor.mode !== 'view') {
+      if (templateEditor.mode === 'edit' && templateEditor.template) {
+        setEditingTemplate({
+          name: templateEditor.template.name,
+          description: templateEditor.template.description,
+          category: templateEditor.template.category,
+          icon: templateEditor.template.icon,
+          prompt: templateEditor.template.prompt,
+          variables: templateEditor.template.variables || []
+        });
+      } else {
+        setEditingTemplate({
+          name: '',
+          description: '',
+          category: 'Custom',
+          icon: '📄',
+          prompt: '',
+          variables: []
+        });
+      }
+    }
+  }, [templateEditor.open, templateEditor.mode, templateEditor.template]);
+
+  // Model management handlers
+  const loadDiarizationModels = async () => {
+    setLoadingModels(true);
+    try {
+      const result = await ipcRenderer.invoke('check-diarization-models');
+      if (result.success) {
+        setDiarizationModels(result);
+      } else {
+        setSnackbar({ open: true, message: 'Failed to check models', severity: 'error' });
+      }
+    } catch (error) {
+      console.error('Failed to load diarization models:', error);
+      setSnackbar({ open: true, message: 'Failed to check models', severity: 'error' });
+    } finally {
+      setLoadingModels(false);
+    }
+  };
+
+  const handleDownloadModel = async (modelKey) => {
+    setDownloadingModel(modelKey);
+    setDownloadProgress({ model: modelKey, progress: 0 });
+    
+    try {
+      const result = await ipcRenderer.invoke('download-diarization-model', modelKey);
+      if (result.success) {
+        setSnackbar({ open: true, message: `${result.result.model} downloaded successfully!`, severity: 'success' });
+        // Reload models to update status
+        loadDiarizationModels();
+      } else {
+        setSnackbar({ open: true, message: result.error || 'Download failed', severity: 'error' });
+      }
+    } catch (error) {
+      console.error('Model download failed:', error);
+      setSnackbar({ open: true, message: 'Download failed', severity: 'error' });
+    } finally {
+      setDownloadingModel(null);
+      setDownloadProgress(null);
+    }
+  };
+
+  const handleDownloadMultipleModels = async (modelKeys) => {
+    setDownloadingModel('multiple');
+    setDownloadProgress({ model: 'multiple', progress: 0 });
+    
+    try {
+      const result = await ipcRenderer.invoke('download-multiple-models', modelKeys);
+      if (result.success) {
+        const successful = result.results.filter(r => r.success).length;
+        const total = result.results.length;
+        setSnackbar({ 
+          open: true, 
+          message: `${successful}/${total} models downloaded successfully!`, 
+          severity: successful === total ? 'success' : 'warning' 
+        });
+        // Reload models to update status
+        loadDiarizationModels();
+      } else {
+        setSnackbar({ open: true, message: result.error || 'Download failed', severity: 'error' });
+      }
+    } catch (error) {
+      console.error('Multiple model download failed:', error);
+      setSnackbar({ open: true, message: 'Download failed', severity: 'error' });
+    } finally {
+      setDownloadingModel(null);
+      setDownloadProgress(null);
+    }
+  };
+
+  // Listen for download progress updates
+  useEffect(() => {
+    const handleDownloadProgress = (event, progress) => {
+      setDownloadProgress(progress);
+    };
+
+    ipcRenderer.on('model-download-progress', handleDownloadProgress);
+    
+    return () => {
+      ipcRenderer.removeListener('model-download-progress', handleDownloadProgress);
+    };
+  }, []);
+
+  // Load models when settings open
+  useEffect(() => {
+    if (showSettings && activeTab === 0) {
+      loadDiarizationModels();
+    }
+  }, [showSettings, activeTab]);
+
   const renderMeetingNotes = () => {
     if (!meetingNotes) {
       return (
@@ -2467,18 +2690,33 @@ function App() {
               
               <Box sx={{ flex: 1 }}>
                 {isListening && (
-                  <Chip 
-                    label="🔴 LIVE" 
-                    size="small" 
-                    sx={{ 
-                      backgroundColor: '#D32F2F',
-                      color: 'white',
-                      fontWeight: 600,
-                      animation: 'pulse 2s infinite',
-                      fontSize: '11px',
-                      borderRadius: 2
-                    }}
-                  />
+                  <Box sx={{ display: 'flex', gap: 1 }}>
+                    <Chip 
+                      label="🔴 LIVE" 
+                      size="small" 
+                      sx={{ 
+                        backgroundColor: '#D32F2F',
+                        color: 'white',
+                        fontWeight: 600,
+                        animation: 'pulse 2s infinite',
+                        fontSize: '11px',
+                        borderRadius: 2
+                      }}
+                    />
+                    {settings?.speakerDetection && (
+                      <Chip 
+                        label="👥 Speakers" 
+                        size="small" 
+                        sx={{ 
+                          backgroundColor: '#8B5CF6',
+                          color: 'white',
+                          fontWeight: 600,
+                          fontSize: '11px',
+                          borderRadius: 2
+                        }}
+                      />
+                    )}
+                  </Box>
                 )}
                 
                 {topics.length > 0 && (
@@ -2758,11 +2996,6 @@ function App() {
                     sx={{ 
                       height: '100%',
                       overflow: 'auto',
-                      fontFamily: 'monospace',
-                      fontSize: '14px',
-                      lineHeight: 1.6,
-                      whiteSpace: 'pre-wrap',
-                      color: 'text.primary',
                       backgroundColor: '#F8F9FA',
                       p: 2,
                       borderRadius: 1,
@@ -2782,7 +3015,86 @@ function App() {
                       }
                     }}
                   >
-                    {transcript || 'Full transcript will appear here when you start recording...'}
+                    {transcript ? (
+                      <Box>
+                        {transcript.split('\n').map((line, index) => {
+                          // Check if line has speaker label
+                          const speakerMatch = line.match(/^(Speaker \d+):\s*(.*)$/);
+                          if (speakerMatch) {
+                            const [, speaker, text] = speakerMatch;
+                            const speakerNum = parseInt(speaker.replace('Speaker ', ''));
+                            const speakerColors = [
+                              '#13AA52', // Green
+                              '#0084FF', // Blue  
+                              '#FF6B35', // Orange
+                              '#8B5CF6', // Purple
+                              '#EC4899', // Pink
+                              '#10B981', // Emerald
+                            ];
+                            const speakerColor = speakerColors[(speakerNum - 1) % speakerColors.length];
+                            
+                            return (
+                              <Box key={index} sx={{ mb: 1, display: 'flex', gap: 1 }}>
+                                <Chip
+                                  label={speaker}
+                                  size="small"
+                                  sx={{
+                                    backgroundColor: speakerColor,
+                                    color: 'white',
+                                    fontSize: '11px',
+                                    height: '20px',
+                                    minWidth: '70px',
+                                    flexShrink: 0,
+                                    '& .MuiChip-label': {
+                                      px: 1
+                                    }
+                                  }}
+                                />
+                                <Typography
+                                  sx={{
+                                    fontFamily: 'inherit',
+                                    fontSize: '14px',
+                                    lineHeight: 1.6,
+                                    color: 'text.primary',
+                                    flex: 1
+                                  }}
+                                >
+                                  {text}
+                                </Typography>
+                              </Box>
+                            );
+                          } else {
+                            // Regular line without speaker
+                            return (
+                              <Typography
+                                key={index}
+                                sx={{
+                                  fontFamily: 'monospace',
+                                  fontSize: '14px',
+                                  lineHeight: 1.6,
+                                  color: 'text.primary',
+                                  mb: line.trim() ? 1 : 0,
+                                  whiteSpace: 'pre-wrap'
+                                }}
+                              >
+                                {line || '\u00A0'}
+                              </Typography>
+                            );
+                          }
+                        })}
+                      </Box>
+                    ) : (
+                      <Typography
+                        sx={{
+                          fontFamily: 'monospace',
+                          fontSize: '14px',
+                          color: 'text.secondary',
+                          fontStyle: 'italic'
+                        }}
+                      >
+                        Full transcript will appear here when you start recording...
+                      </Typography>
+                    )}
                   </Box>
                 )}
                 
@@ -3377,6 +3689,159 @@ function App() {
                           </Select>
                         </FormControl>
                       </ListItem>
+                      <ListItem>
+                        <ListItemText 
+                          primary="Speaker Detection"
+                          secondary="Identify different speakers in conversations (Speaker 1, Speaker 2, etc.)"
+                        />
+                        <ListItemSecondaryAction>
+                          <Switch
+                            checked={settings?.speakerDetection || false}
+                            onChange={(e) => handleSettingsUpdate({
+                              ...settings,
+                              speakerDetection: e.target.checked
+                            })}
+                          />
+                        </ListItemSecondaryAction>
+                      </ListItem>
+
+                      {/* Model Download Section */}
+                      {settings?.speakerDetection && (
+                        <ListItem sx={{ flexDirection: 'column', alignItems: 'stretch', py: 2 }}>
+                          <Box sx={{ mb: 2 }}>
+                            <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
+                              🎭 Speaker Detection Models
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                              Download AI models to enable automatic speaker identification
+                            </Typography>
+                          </Box>
+
+                          {loadingModels ? (
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, py: 2 }}>
+                              <CircularProgress size={20} />
+                              <Typography variant="body2">Checking installed models...</Typography>
+                            </Box>
+                          ) : diarizationModels ? (
+                            <Stack spacing={2}>
+                              {Object.entries(diarizationModels.models || {}).map(([key, model]) => (
+                                <Paper key={key} sx={{ p: 2, border: '1px solid', borderColor: 'divider' }}>
+                                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                    <Box sx={{ flex: 1 }}>
+                                      <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                                        {model.name}
+                                      </Typography>
+                                      <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                                        {model.description}
+                                      </Typography>
+                                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                        <Chip
+                                          label={model.installed ? 'Installed' : 'Not Installed'}
+                                          size="small"
+                                          color={model.installed ? 'success' : 'default'}
+                                          variant={model.installed ? 'filled' : 'outlined'}
+                                        />
+                                        <Typography variant="caption" color="text.secondary">
+                                          {model.size || model.actualSize}
+                                        </Typography>
+                                      </Box>
+                                    </Box>
+                                    
+                                    <Box sx={{ ml: 2 }}>
+                                      {model.installed ? (
+                                        <Chip 
+                                          label="✅ Ready" 
+                                          size="small" 
+                                          color="success"
+                                          variant="outlined"
+                                        />
+                                      ) : (
+                                        <Button
+                                          size="small"
+                                          variant="outlined"
+                                          onClick={() => handleDownloadModel(key)}
+                                          disabled={downloadingModel === key || downloadingModel === 'multiple'}
+                                          startIcon={downloadingModel === key ? <CircularProgress size={14} /> : null}
+                                        >
+                                          {downloadingModel === key ? 'Downloading...' : 'Download'}
+                                        </Button>
+                                      )}
+                                    </Box>
+                                  </Box>
+                                  
+                                  {/* Download Progress */}
+                                  {downloadingModel === key && downloadProgress && (
+                                    <Box sx={{ mt: 2 }}>
+                                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                                        <Typography variant="caption">
+                                          {downloadProgress.downloadedBytes} / {downloadProgress.totalBytes}
+                                        </Typography>
+                                        <Typography variant="caption">
+                                          {downloadProgress.progress}%
+                                        </Typography>
+                                      </Box>
+                                      <Box sx={{ 
+                                        width: '100%', 
+                                        height: 6, 
+                                        bgcolor: 'grey.200', 
+                                        borderRadius: 3,
+                                        overflow: 'hidden'
+                                      }}>
+                                        <Box
+                                          sx={{
+                                            width: `${downloadProgress.progress}%`,
+                                            height: '100%',
+                                            bgcolor: 'primary.main',
+                                            transition: 'width 0.3s ease'
+                                          }}
+                                        />
+                                      </Box>
+                                    </Box>
+                                  )}
+                                </Paper>
+                              ))}
+
+                              {/* Quick Action Buttons */}
+                              <Box sx={{ display: 'flex', gap: 2, pt: 1 }}>
+                                {diarizationModels.recommendations?.map((rec, index) => (
+                                  <Button
+                                    key={index}
+                                    variant={rec.primary ? 'contained' : 'outlined'}
+                                    size="small"
+                                    onClick={() => handleDownloadMultipleModels(rec.models)}
+                                    disabled={downloadingModel || rec.models.every(m => diarizationModels.models[m]?.installed)}
+                                    startIcon={downloadingModel === 'multiple' ? <CircularProgress size={14} /> : null}
+                                  >
+                                    {rec.title}
+                                  </Button>
+                                ))}
+                                
+                                <Button
+                                  variant="text"
+                                  size="small"
+                                  onClick={loadDiarizationModels}
+                                  disabled={loadingModels}
+                                >
+                                  Refresh Status
+                                </Button>
+                              </Box>
+                            </Stack>
+                          ) : (
+                            <Alert severity="info" sx={{ mb: 2 }}>
+                              <Typography variant="body2">
+                                Click "Check Models" to see available speaker detection models
+                              </Typography>
+                              <Button
+                                size="small"
+                                onClick={loadDiarizationModels}
+                                sx={{ mt: 1 }}
+                              >
+                                Check Models
+                              </Button>
+                            </Alert>
+                          )}
+                        </ListItem>
+                      )}
                     </List>
                   </Box>
                 </Stack>
@@ -3566,26 +4031,33 @@ function App() {
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <Typography variant="h6">Report Templates</Typography>
                     <Box sx={{ display: 'flex', gap: 1 }}>
+                      <Button 
+                        size="small" 
+                        variant="contained" 
+                        onClick={() => setTemplateEditor({ open: true, mode: 'create', template: null })}
+                        startIcon="+"
+                      >
+                        New Template
+                      </Button>
                       <Button size="small" onClick={() => loadTemplates()}>
                         Refresh
                       </Button>
                       <Button size="small" onClick={() => exportAllTemplates()}>
                         Export All
                       </Button>
+                      <input
+                        type="file"
+                        id="template-import"
+                        accept=".json"
+                        style={{ display: 'none' }}
+                        onChange={handleTemplateImport}
+                      />
                       <Button 
                         size="small" 
-                        onClick={async () => {
-                          const result = await ipcRenderer.invoke('force-add-mongodb-template');
-                          if (result.success) {
-                            setSnackbar({ open: true, message: 'MongoDB template added!', severity: 'success' });
-                            loadTemplates();
-                          } else {
-                            setSnackbar({ open: true, message: 'Failed to add MongoDB template', severity: 'error' });
-                          }
-                        }}
-                        sx={{ bgcolor: 'primary.main', color: 'white', '&:hover': { bgcolor: 'primary.dark' } }}
+                        onClick={() => document.getElementById('template-import').click()}
+                        startIcon="📥"
                       >
-                        Add MongoDB Template
+                        Import
                       </Button>
                     </Box>
                   </Box>
@@ -3598,15 +4070,79 @@ function App() {
                     <List>
                       {templates.map((template) => (
                         <ListItem key={template._id} sx={{ border: 1, borderColor: 'divider', borderRadius: 1, mb: 1 }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', mr: 2 }}>
+                            <Typography sx={{ fontSize: '1.5rem', mr: 1 }}>
+                              {template.icon || '📄'}
+                            </Typography>
+                          </Box>
                           <ListItemText
-                            primary={template.name}
-                            secondary={template.description}
+                            primary={
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                                  {template.name}
+                                </Typography>
+                                <Chip 
+                                  label={template.category} 
+                                  size="small" 
+                                  color="primary"
+                                  variant="outlined"
+                                />
+                                {template.metadata?.isDefault && (
+                                  <Chip 
+                                    label="Default" 
+                                    size="small" 
+                                    color="success"
+                                    variant="outlined"
+                                  />
+                                )}
+                              </Box>
+                            }
+                            secondary={
+                              <Box>
+                                <Typography variant="body2" color="text.secondary">
+                                  {template.description}
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary">
+                                  Version: {template.version || '1.0.0'} | 
+                                  Variables: {template.variables?.length || 0} | 
+                                  Author: {template.metadata?.author || 'Unknown'}
+                                </Typography>
+                              </Box>
+                            }
                           />
-                          <ListItemSecondaryAction>
-                            <IconButton size="small" onClick={() => exportTemplate(template._id)}>
+                          <Box sx={{ display: 'flex', gap: 1 }}>
+                            <IconButton 
+                              size="small" 
+                              onClick={() => setTemplateEditor({ open: true, mode: 'view', template })}
+                              title="View Template"
+                            >
+                              👁️
+                            </IconButton>
+                            <IconButton 
+                              size="small" 
+                              onClick={() => setTemplateEditor({ open: true, mode: 'edit', template })}
+                              disabled={template.metadata?.isDefault}
+                              title="Edit Template"
+                            >
+                              ✏️
+                            </IconButton>
+                            <IconButton 
+                              size="small" 
+                              onClick={() => exportTemplate(template._id)}
+                              title="Export Template"
+                            >
                               📤
                             </IconButton>
-                          </ListItemSecondaryAction>
+                            <IconButton 
+                              size="small" 
+                              onClick={() => handleDeleteTemplate(template._id)}
+                              disabled={template.metadata?.isDefault}
+                              title="Delete Template"
+                              sx={{ color: 'error.main' }}
+                            >
+                              🗑️
+                            </IconButton>
+                          </Box>
                         </ListItem>
                       ))}
                     </List>
@@ -4088,6 +4624,215 @@ function App() {
               >
                 Export Report
               </Button>
+            </DialogActions>
+          </Dialog>
+        )}
+
+        {/* Template Editor Dialog */}
+        {templateEditor.open && (
+          <Dialog
+            open={templateEditor.open}
+            onClose={() => setTemplateEditor({ open: false, mode: 'create', template: null })}
+            maxWidth="md"
+            fullWidth
+          >
+            <DialogTitle>
+              {templateEditor.mode === 'create' ? 'Create New Template' : 
+               templateEditor.mode === 'edit' ? 'Edit Template' : 'View Template'}
+            </DialogTitle>
+            <DialogContent>
+              <Stack spacing={3} sx={{ mt: 2 }}>
+                {templateEditor.mode === 'view' ? (
+                  // View mode - read-only
+                  <Stack spacing={2}>
+                    <TextField
+                      label="Template Name"
+                      value={templateEditor.template?.name || ''}
+                      InputProps={{ readOnly: true }}
+                      fullWidth
+                    />
+                    <TextField
+                      label="Description"
+                      value={templateEditor.template?.description || ''}
+                      InputProps={{ readOnly: true }}
+                      fullWidth
+                      multiline
+                      rows={2}
+                    />
+                    <TextField
+                      label="Category"
+                      value={templateEditor.template?.category || ''}
+                      InputProps={{ readOnly: true }}
+                      fullWidth
+                    />
+                    <TextField
+                      label="Icon"
+                      value={templateEditor.template?.icon || ''}
+                      InputProps={{ readOnly: true }}
+                      fullWidth
+                    />
+                    <TextField
+                      label="Prompt Template"
+                      value={templateEditor.template?.prompt || ''}
+                      InputProps={{ readOnly: true }}
+                      fullWidth
+                      multiline
+                      rows={8}
+                    />
+                    <Typography variant="h6">Variables ({templateEditor.template?.variables?.length || 0})</Typography>
+                    {templateEditor.template?.variables?.map((variable, index) => (
+                      <Paper key={index} sx={{ p: 2, bgcolor: 'grey.50' }}>
+                        <Typography variant="subtitle2">{variable.name}</Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          Type: {variable.type} | Required: {variable.required ? 'Yes' : 'No'}
+                        </Typography>
+                        {variable.placeholder && (
+                          <Typography variant="body2" color="text.secondary">
+                            Placeholder: {variable.placeholder}
+                          </Typography>
+                        )}
+                      </Paper>
+                    ))}
+                  </Stack>
+                ) : (
+                  // Create/Edit mode
+                  <Stack spacing={2}>
+                    <TextField
+                      label="Template Name"
+                      value={editingTemplate?.name || ''}
+                      onChange={(e) => setEditingTemplate({ ...editingTemplate, name: e.target.value })}
+                      fullWidth
+                      required
+                    />
+                    <TextField
+                      label="Description"
+                      value={editingTemplate?.description || ''}
+                      onChange={(e) => setEditingTemplate({ ...editingTemplate, description: e.target.value })}
+                      fullWidth
+                      multiline
+                      rows={2}
+                      required
+                    />
+                    <TextField
+                      label="Category"
+                      value={editingTemplate?.category || ''}
+                      onChange={(e) => setEditingTemplate({ ...editingTemplate, category: e.target.value })}
+                      fullWidth
+                      required
+                    />
+                    <TextField
+                      label="Icon (emoji)"
+                      value={editingTemplate?.icon || ''}
+                      onChange={(e) => setEditingTemplate({ ...editingTemplate, icon: e.target.value })}
+                      fullWidth
+                      placeholder="📄"
+                    />
+                    <TextField
+                      label="Prompt Template"
+                      value={editingTemplate?.prompt || ''}
+                      onChange={(e) => setEditingTemplate({ ...editingTemplate, prompt: e.target.value })}
+                      fullWidth
+                      multiline
+                      rows={8}
+                      required
+                      helperText="Use {{variableName}} for variable substitution"
+                    />
+                    <Typography variant="h6">Variables</Typography>
+                    <Button
+                      variant="outlined"
+                      onClick={() => setEditingTemplate({
+                        ...editingTemplate,
+                        variables: [
+                          ...(editingTemplate?.variables || []),
+                          { name: '', type: 'text', required: false, placeholder: '' }
+                        ]
+                      })}
+                      startIcon="+"
+                    >
+                      Add Variable
+                    </Button>
+                    {editingTemplate?.variables?.map((variable, index) => (
+                      <Paper key={index} sx={{ p: 2, border: 1, borderColor: 'divider' }}>
+                        <Stack spacing={2}>
+                          <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+                            <TextField
+                              label="Variable Name"
+                              value={variable.name}
+                              onChange={(e) => {
+                                const newVariables = [...editingTemplate.variables];
+                                newVariables[index].name = e.target.value;
+                                setEditingTemplate({ ...editingTemplate, variables: newVariables });
+                              }}
+                              size="small"
+                              sx={{ flex: 1 }}
+                              required
+                            />
+                            <FormControl size="small" sx={{ minWidth: 100 }}>
+                              <Select
+                                value={variable.type}
+                                onChange={(e) => {
+                                  const newVariables = [...editingTemplate.variables];
+                                  newVariables[index].type = e.target.value;
+                                  setEditingTemplate({ ...editingTemplate, variables: newVariables });
+                                }}
+                              >
+                                <MenuItem value="text">Text</MenuItem>
+                                <MenuItem value="textarea">Textarea</MenuItem>
+                                <MenuItem value="select">Select</MenuItem>
+                                <MenuItem value="date">Date</MenuItem>
+                                <MenuItem value="number">Number</MenuItem>
+                              </Select>
+                            </FormControl>
+                            <Switch
+                              checked={variable.required}
+                              onChange={(e) => {
+                                const newVariables = [...editingTemplate.variables];
+                                newVariables[index].required = e.target.checked;
+                                setEditingTemplate({ ...editingTemplate, variables: newVariables });
+                              }}
+                            />
+                            <IconButton
+                              size="small"
+                              onClick={() => {
+                                const newVariables = editingTemplate.variables.filter((_, i) => i !== index);
+                                setEditingTemplate({ ...editingTemplate, variables: newVariables });
+                              }}
+                              sx={{ color: 'error.main' }}
+                            >
+                              🗑️
+                            </IconButton>
+                          </Box>
+                          <TextField
+                            label="Placeholder"
+                            value={variable.placeholder}
+                            onChange={(e) => {
+                              const newVariables = [...editingTemplate.variables];
+                              newVariables[index].placeholder = e.target.value;
+                              setEditingTemplate({ ...editingTemplate, variables: newVariables });
+                            }}
+                            size="small"
+                            fullWidth
+                          />
+                        </Stack>
+                      </Paper>
+                    ))}
+                  </Stack>
+                )}
+              </Stack>
+            </DialogContent>
+            <DialogActions>
+              <Button onClick={() => setTemplateEditor({ open: false, mode: 'create', template: null })}>
+                Cancel
+              </Button>
+              {templateEditor.mode !== 'view' && (
+                <Button
+                  variant="contained"
+                  onClick={handleSaveTemplate}
+                  disabled={!editingTemplate?.name || !editingTemplate?.description || !editingTemplate?.prompt}
+                >
+                  {templateEditor.mode === 'create' ? 'Create' : 'Save'}
+                </Button>
+              )}
             </DialogActions>
           </Dialog>
         )}

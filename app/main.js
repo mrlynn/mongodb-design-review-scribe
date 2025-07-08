@@ -4,8 +4,15 @@ const { app, BrowserWindow, ipcMain, powerSaveBlocker, dialog } = require('elect
 app.commandLine.appendSwitch('max-old-space-size', '2048'); // Increase to 2GB for stability
 app.commandLine.appendSwitch('js-flags', '--max-old-space-size=2048 --expose-gc --optimize-for-size');
 
-// Import emergency debugging system
-const EmergencyDebugger = require('../debug-emergency');
+// Import emergency debugging system (only in development)
+let EmergencyDebugger;
+if (process.env.NODE_ENV !== 'production') {
+  try {
+    EmergencyDebugger = require('./debug/debug-emergency');
+  } catch (e) {
+    // Debug module not available
+  }
+}
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -25,13 +32,22 @@ const { generateReport, getReport, getSessionReports, getUserReports, updateRepo
 const RAGDocumentManager = require('./services/ragDocumentManager');
 const RAGEnhancedProcessor = require('./services/ragEnhancedProcessor');
 const OllamaManager = require('./services/ollamaManager');
+const ModelDownloader = require('./services/modelDownloader');
 
-// Import emergency debugging toolkit
-const BlankingDebugger = require('../debug-toolkit');
+// Import emergency debugging toolkit (only in development)
+let BlankingDebugger;
+if (process.env.NODE_ENV !== 'production') {
+  try {
+    BlankingDebugger = require('./debug/debug-toolkit');
+  } catch (e) {
+    // Debug module not available
+  }
+}
 
 // Import menu builders
 const AppMenuBuilder = require('./menu/appMenu');
 const ContextMenuBuilder = require('./menu/contextMenu');
+const { isFirstRun, showFirstRunDialog } = require('./utils/firstRun');
 
 let mainWindow;
 let splashWindow;
@@ -81,6 +97,11 @@ function createSplashWindow() {
     if (splashWindow) {
       closeSplashWindow();
     }
+    // Ensure main window is shown even if renderer doesn't load
+    if (mainWindow && !mainWindow.isVisible()) {
+      console.log('⚠️ Fallback: Showing main window after timeout');
+      mainWindow.show();
+    }
   }, 5000);
   
   return splashWindow;
@@ -94,8 +115,10 @@ function closeSplashWindow() {
 }
 
 function createWindow() {
-  // Initialize emergency debugging toolkit
-  blankingDebugger = new BlankingDebugger();
+  // Initialize emergency debugging toolkit (only in development)
+  if (BlankingDebugger && process.env.NODE_ENV !== 'production') {
+    blankingDebugger = new BlankingDebugger();
+  }
   
   // Determine icon path based on platform
   let iconPath;
@@ -138,10 +161,38 @@ function createWindow() {
   // Initialize context menu
   new ContextMenuBuilder(mainWindow);
   
-  mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
+  const indexPath = path.join(__dirname, '../dist/index.html');
+  console.log('📄 Loading index.html from:', indexPath);
   
-  // Open DevTools in development
-  if (process.env.NODE_ENV !== 'production') {
+  // Check if file exists
+  if (!fs.existsSync(indexPath)) {
+    console.error('❌ index.html not found at:', indexPath);
+    const altPath = path.join(__dirname, '../index.html');
+    console.log('🔄 Trying alternative path:', altPath);
+    if (fs.existsSync(altPath)) {
+      mainWindow.loadFile(altPath);
+    } else {
+      console.error('❌ No index.html found in either location');
+    }
+  } else {
+    mainWindow.loadFile(indexPath);
+  }
+  
+  // Add error handling for renderer
+  mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
+    console.error('❌ Renderer failed to load:', errorCode, errorDescription, validatedURL);
+  });
+  
+  mainWindow.webContents.on('crashed', () => {
+    console.error('❌ Renderer crashed');
+  });
+  
+  mainWindow.webContents.on('unresponsive', () => {
+    console.error('❌ Renderer unresponsive');
+  });
+  
+  // Open DevTools in development (temporarily also in production for debugging)
+  if (process.env.NODE_ENV !== 'production' || true) {
     mainWindow.webContents.openDevTools();
   }
   
@@ -152,7 +203,21 @@ function createWindow() {
   setupProcessorHandlers();
   
   // Test LLM connection after page is ready
-  mainWindow.webContents.once('did-finish-load', () => {
+  mainWindow.webContents.once('did-finish-load', async () => {
+    console.log('✅ Renderer finished loading');
+    
+    // Close splash window and show main window
+    closeSplashWindow();
+    mainWindow.show();
+    console.log('✅ Main window shown');
+    
+    // Show first run dialog if needed
+    if (isFirstRun()) {
+      console.log('🆕 First run detected, showing dialog');
+      await showFirstRunDialog(mainWindow);
+      console.log('✅ First run dialog completed');
+    }
+    
     testLLMConnection().then(connected => {
       console.log('Sending llm-status to renderer:', connected);
       mainWindow.webContents.send('ollama-status', connected);
@@ -472,9 +537,12 @@ ipcMain.on('start-transcription', async (event) => {
   // Clear processor
   processor.clear();
   
-  // Get audio device from settings
+  // Get audio device and speaker detection from settings
   const config = loadConfig();
   const audioDevice = config?.audioDevice;
+  const enableSpeakerDetection = config?.speakerDetection || false;
+  
+  console.log('Main: Starting transcription with speaker detection:', enableSpeakerDetection);
   
   whisperProc = await stt.startTranscription((data) => {
     console.log('🎤 Main: Received transcript data:', data);
@@ -510,9 +578,9 @@ ipcMain.on('start-transcription', async (event) => {
     } else if (data.type === 'error' || data.type === 'system') {
       // System messages
       console.log('🎤 Main: Sending system/error transcript-update to renderer:', data.text);
-      mainWindow.webContents.send('transcript-update', { type: data.type, text: data.text });
+      mainWindow.webContents.send('transcript-update', { type: data.type, text: data.text, speaker: data.speaker, hasSpeaker: data.hasSpeaker });
     }
-  }, audioDevice);
+  }, audioDevice, enableSpeakerDetection);
   
 });
 
@@ -1743,6 +1811,80 @@ ipcMain.handle('rag-enhance-analysis', async (event, transcript, analysisType, o
     return { success: true, result };
   } catch (error) {
     console.error('RAG-enhanced analysis failed:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Model Downloader IPC handlers
+const modelDownloader = new ModelDownloader();
+
+ipcMain.handle('check-diarization-models', async () => {
+  try {
+    const installed = modelDownloader.checkInstalledModels();
+    const recommendations = modelDownloader.getRecommendations();
+    
+    return {
+      success: true,
+      models: installed,
+      recommendations: recommendations,
+      modelsDir: modelDownloader.modelsDir
+    };
+  } catch (error) {
+    console.error('Failed to check diarization models:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('download-diarization-model', async (event, modelKey) => {
+  try {
+    console.log(`Starting download for model: ${modelKey}`);
+    
+    const result = await modelDownloader.downloadModel(modelKey, (progress) => {
+      // Send progress updates to renderer
+      event.sender.send('model-download-progress', progress);
+    });
+    
+    console.log('Model download completed:', result);
+    return { success: true, result };
+  } catch (error) {
+    console.error('Model download failed:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('download-multiple-models', async (event, modelKeys) => {
+  try {
+    console.log(`Starting download for models: ${modelKeys.join(', ')}`);
+    
+    const results = await modelDownloader.downloadModels(modelKeys, (progress) => {
+      // Send progress updates to renderer
+      event.sender.send('model-download-progress', progress);
+    });
+    
+    console.log('Multiple models download completed:', results);
+    return { success: true, results };
+  } catch (error) {
+    console.error('Multiple models download failed:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('cleanup-failed-downloads', async () => {
+  try {
+    const cleaned = modelDownloader.cleanupFailedDownloads();
+    return { success: true, cleaned };
+  } catch (error) {
+    console.error('Failed to cleanup downloads:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('get-model-recommendations', async () => {
+  try {
+    const recommendations = modelDownloader.getRecommendations();
+    return { success: true, recommendations };
+  } catch (error) {
+    console.error('Failed to get model recommendations:', error);
     return { success: false, error: error.message };
   }
 });

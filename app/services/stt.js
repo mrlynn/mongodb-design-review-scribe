@@ -4,12 +4,96 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 
-// Clean up transcript lines
-function cleanTranscriptLine(line) {
-  console.log(`cleanTranscriptLine input: "${line}"`);
+// Parse speaker-labeled output from whisper with diarization
+// Global speaker tracking for tinydiarize format
+let currentSpeaker = 1;
+
+function parseSpeakerLine(line, enableSpeakerDetection = false) {
+  console.log(`parseSpeakerLine input: "${line}", enableSpeakerDetection: ${enableSpeakerDetection}`);
+  
+  if (!line || typeof line !== 'string') {
+    return null;
+  }
+  
+  // If speaker detection is enabled, look for speaker labels
+  if (enableSpeakerDetection) {
+    // Check for [SPEAKER_TURN] marker which indicates speaker change
+    if (line.includes('[SPEAKER_TURN]') || line.includes('[SPEAKER TURN]')) {
+      // Speaker change detected - increment speaker number
+      currentSpeaker += 1;
+      console.log(`parseSpeakerLine: Speaker change detected, now on Speaker ${currentSpeaker}`);
+      
+      // Extract text without the speaker turn marker
+      const text = line
+        .replace(/\[SPEAKER_TURN\]/g, '')
+        .replace(/\[SPEAKER TURN\]/g, '')
+        .replace(/\[\d{2}:\d{2}:\d{2}\.\d{3} --> \d{2}:\d{2}:\d{2}\.\d{3}\]/g, '') // Remove timestamps
+        .trim();
+      
+      const cleaned = cleanTranscriptText(text);
+      if (cleaned) {
+        console.log(`parseSpeakerLine: Speaker change with text: Speaker ${currentSpeaker}: "${cleaned}"`);
+        return {
+          speaker: `Speaker ${currentSpeaker}`,
+          text: cleaned,
+          hasSpeaker: true
+        };
+      }
+    }
+    
+    // Look for traditional speaker patterns as fallback
+    const speakerMatch = line.match(/(?:\[.*?\]\s*)?\[SPEAKER_(\d+)\]\s*(.+)/) || 
+                        line.match(/SPEAKER_(\d+):\s*(.+)/) ||
+                        line.match(/\[(\d+)\]\s*(.+)/);
+    
+    if (speakerMatch) {
+      const speakerNum = parseInt(speakerMatch[1]) + 1; // Convert 0-based to 1-based
+      const text = speakerMatch[2].trim();
+      const cleaned = cleanTranscriptText(text);
+      
+      if (cleaned) {
+        currentSpeaker = speakerNum; // Update current speaker
+        console.log(`parseSpeakerLine: Found explicit speaker ${speakerNum}: "${cleaned}"`);
+        return {
+          speaker: `Speaker ${speakerNum}`,
+          text: cleaned,
+          hasSpeaker: true
+        };
+      }
+    }
+    
+    // If no speaker marker found, use current speaker
+    const text = line.replace(/\[\d{2}:\d{2}:\d{2}\.\d{3} --> \d{2}:\d{2}:\d{2}\.\d{3}\]/g, '').trim();
+    const cleaned = cleanTranscriptText(text);
+    if (cleaned) {
+      console.log(`parseSpeakerLine: Continuing with Speaker ${currentSpeaker}: "${cleaned}"`);
+      return {
+        speaker: `Speaker ${currentSpeaker}`,
+        text: cleaned,
+        hasSpeaker: true
+      };
+    }
+  }
+  
+  // Fall back to regular processing without speaker labels
+  const cleaned = cleanTranscriptText(line);
+  if (cleaned) {
+    return {
+      speaker: null,
+      text: cleaned,
+      hasSpeaker: false
+    };
+  }
+  
+  return null;
+}
+
+// Clean up transcript text
+function cleanTranscriptText(line) {
+  console.log(`cleanTranscriptText input: "${line}"`);
   
   if (!line) {
-    console.log('cleanTranscriptLine: line is null/undefined');
+    console.log('cleanTranscriptText: line is null/undefined');
     return null;
   }
   
@@ -29,7 +113,7 @@ function cleanTranscriptLine(line) {
   // Check if line matches any filter
   for (const filter of filters) {
     if (filter.test(line)) {
-      console.log(`cleanTranscriptLine: filtered by pattern ${filter}`);
+      console.log(`cleanTranscriptText: filtered by pattern ${filter}`);
       return null;
     }
   }
@@ -52,23 +136,88 @@ function cleanTranscriptLine(line) {
     .replace(/\s+/g, ' ')                 // Normalize whitespace
     .trim();
     
-  console.log(`cleanTranscriptLine: after cleaning: "${cleaned}" (length: ${cleaned.length})`);
+  console.log(`cleanTranscriptText: after cleaning: "${cleaned}" (length: ${cleaned.length})`);
   
   // Only return if it has substantial content (temporarily relaxed for debugging)
   const result = cleaned.length > 1 ? cleaned : null;
-  console.log(`cleanTranscriptLine: final result: "${result}"`);
+  console.log(`cleanTranscriptText: final result: "${result}"`);
   return result;
 }
 
 // Path to whisper.cpp binary and model
+const getResourcePath = () => {
+  // In production, resources are in the app's resources folder
+  if (process.resourcesPath) {
+    return process.resourcesPath;
+  }
+  // In development
+  return path.join(__dirname, '../..');
+};
+
+const resourcePath = getResourcePath();
+
 const WHISPER_BIN_PATHS = [
+  // Production paths (from extraResources)
+  path.join(resourcePath, 'bin', 'whisper-cli'),
+  path.join(resourcePath, 'bin', 'main'),
+  path.join(resourcePath, 'bin', 'whisper'),
+  // Development paths
   path.join(__dirname, '../../whisper.cpp/build/bin/whisper-cli'),
   path.join(__dirname, '../../whisper.cpp/build/bin/main'),
   path.join(__dirname, '../../whisper.cpp/build/bin/whisper-server'),
   path.join(__dirname, '../../whisper.cpp/stream'),
   path.join(__dirname, '../../whisper.cpp/main')
 ];
-const MODEL_PATH = path.join(__dirname, '../../whisper.cpp/models/ggml-base.en.bin');
+
+const MODEL_PATHS = [
+  // Production paths
+  path.join(resourcePath, 'models', 'ggml-base.en.bin'),
+  // Development paths
+  path.join(__dirname, '../../whisper.cpp/models/ggml-base.en.bin')
+];
+
+// Diarization model paths (for speaker detection)
+const DIARIZATION_MODEL_PATHS = [
+  // Production paths
+  path.join(resourcePath, 'models', 'ggml-base.en-tdrz.bin'),
+  path.join(resourcePath, 'models', 'ggml-small.en-tdrz.bin'),
+  // Development paths
+  path.join(__dirname, '../../whisper.cpp/models/ggml-base.en-tdrz.bin'),
+  path.join(__dirname, '../../whisper.cpp/models/ggml-small.en-tdrz.bin')
+];
+
+function findModelPath(useDiarization = false) {
+  const pathsToSearch = useDiarization ? DIARIZATION_MODEL_PATHS : MODEL_PATHS;
+  
+  for (const modelPath of pathsToSearch) {
+    try {
+      fs.accessSync(modelPath);
+      return modelPath;
+    } catch (e) {
+      // Continue to next path
+    }
+  }
+  
+  // If diarization model not found, fall back to regular model
+  if (useDiarization) {
+    console.warn('STT: Diarization model not found, falling back to regular model');
+    return findModelPath(false);
+  }
+  
+  return null;
+}
+
+function findDiarizationModelPath() {
+  for (const modelPath of DIARIZATION_MODEL_PATHS) {
+    try {
+      fs.accessSync(modelPath);
+      return modelPath;
+    } catch (e) {
+      // Continue to next path
+    }
+  }
+  return null;
+}
 
 function findWhisperBinary() {
   for (const binPath of WHISPER_BIN_PATHS) {
@@ -82,7 +231,10 @@ function findWhisperBinary() {
   return null;
 }
 
-async function startTranscription(onTranscript, audioDeviceIndex = null) {
+async function startTranscription(onTranscript, audioDeviceIndex = null, enableSpeakerDetection = false) {
+  // Reset speaker counter for new session
+  currentSpeaker = 1;
+  
   // Check if whisper.cpp binary exists
   const WHISPER_BIN = findWhisperBinary();
   if (!WHISPER_BIN) {
@@ -93,16 +245,26 @@ async function startTranscription(onTranscript, audioDeviceIndex = null) {
   
   console.log('STT: Using whisper binary:', WHISPER_BIN);
   
-  // Check if model exists
-  try {
-    fs.accessSync(MODEL_PATH);
-    const modelStats = fs.statSync(MODEL_PATH);
-    console.log('STT: Using model file:', MODEL_PATH, 'Size:', Math.round(modelStats.size / 1024 / 1024), 'MB');
-  } catch (e) {
-    console.error('STT: Model file not found:', MODEL_PATH);
-    onTranscript({ type: 'error', text: '[Error] Model file not found. Please download and place ggml-base.en.bin in whisper/models/' });
+  // Check if model exists (prefer diarization model if enabled)
+  const MODEL_PATH = findModelPath(enableSpeakerDetection);
+  if (!MODEL_PATH) {
+    const modelType = enableSpeakerDetection ? 'diarization' : 'standard';
+    console.error(`STT: ${modelType} model file not found. Checked paths:`, enableSpeakerDetection ? DIARIZATION_MODEL_PATHS : MODEL_PATHS);
+    onTranscript({ type: 'error', text: `[Error] ${modelType} model file not found. Please ensure whisper model is installed.` });
     return null;
   }
+  
+  const isDiarizationModel = DIARIZATION_MODEL_PATHS.some(path => path === MODEL_PATH);
+  if (enableSpeakerDetection && !isDiarizationModel) {
+    console.warn('STT: Speaker detection requested but diarization model not available, using standard model');
+    onTranscript({ type: 'system', text: '[Speaker detection unavailable, using standard transcription]' });
+  } else if (enableSpeakerDetection && isDiarizationModel) {
+    console.log('STT: Using diarization model for speaker detection');
+    onTranscript({ type: 'system', text: '[Speaker detection enabled]' });
+  }
+  
+  const modelStats = fs.statSync(MODEL_PATH);
+  console.log('STT: Using model file:', MODEL_PATH, 'Size:', Math.round(modelStats.size / 1024 / 1024), 'MB');
 
   // Test whisper binary works
   try {
@@ -308,9 +470,16 @@ async function startTranscription(onTranscript, audioDeviceIndex = null) {
               '-m', MODEL_PATH,
               '-t', '4',
               '-f', audioFile,
-              '--language', 'en',
-              '--no-timestamps'
+              '--language', 'en'
             ];
+            
+            // Add diarization support if enabled and available
+            if (enableSpeakerDetection && isDiarizationModel) {
+              whisperArgs.push('--tinydiarize');
+              // Keep timestamps for speaker detection - they're enabled by default
+            } else {
+              whisperArgs.push('--no-timestamps');
+            }
             
             console.log(`STT: Processing audio file: ${audioFile}`);
             console.log(`STT: Whisper command: ${WHISPER_BIN} ${whisperArgs.join(' ')}`);
@@ -326,18 +495,29 @@ async function startTranscription(onTranscript, audioDeviceIndex = null) {
               console.log(`STT: Processing ${lines.length} lines from whisper output`);
               lines.forEach((line, index) => {
                 console.log(`STT: Line ${index}: "${line}"`);
-                const cleaned = cleanTranscriptLine(line);
-                console.log(`STT: Cleaned line ${index}: "${cleaned}"`);
-                if (cleaned && !cleaned.includes('whisper_') && !cleaned.includes('.cpp')) {
-                  console.log('STT: ✅ Sending transcript:', cleaned);
-                  onTranscript({ type: 'final', text: cleaned });
+                
+                // Skip whisper debug output
+                if (line.includes('whisper_') || line.includes('.cpp')) {
+                  console.log(`STT: ❌ Skipping debug line ${index}: "${line}"`);
+                  return;
+                }
+                
+                const result = parseSpeakerLine(line, enableSpeakerDetection && isDiarizationModel);
+                console.log(`STT: Parsed line ${index}:`, result);
+                
+                if (result && result.text) {
+                  const transcriptText = result.speaker ? `${result.speaker}: ${result.text}` : result.text;
+                  console.log('STT: ✅ Sending transcript:', transcriptText);
+                  onTranscript({ 
+                    type: 'final', 
+                    text: transcriptText,
+                    speaker: result.speaker,
+                    hasSpeaker: result.hasSpeaker 
+                  });
                 } else {
                   console.log(`STT: ❌ Filtered out line ${index}:`, {
                     original: line,
-                    cleaned: cleaned,
-                    hasWhisper: line.includes('whisper_'),
-                    hasCpp: line.includes('.cpp'),
-                    cleanedExists: !!cleaned
+                    result: result
                   });
                 }
               });
