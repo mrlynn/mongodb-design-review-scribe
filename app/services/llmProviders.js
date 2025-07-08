@@ -129,20 +129,42 @@ class BaseProvider {
   }
 
   buildTopicsPrompt(text) {
-    return `You are analyzing a conversation transcript. Extract the main topics, questions, and unknown terms that would benefit from research.
+    return `You are an intelligent conversation analyzer focused on extracting meaningful topics for real-time research and recommendations.
+
+Analyze this conversation segment and identify:
+1. Main topics being discussed that would benefit from additional context or research
+2. Technical concepts, tools, or technologies mentioned
+3. Problems or challenges being discussed
+4. Questions (explicit or implied) that need answers
+5. Business or strategic topics that require deeper insights
 
 Conversation transcript:
 "${text}"
 
-Respond with a JSON object containing:
-1. "topics": array of 1-3 main topics or concepts discussed (short phrases)
-2. "questions": array of any questions asked or implied (if any)
-3. "terms": array of technical terms or concepts that might need explanation
+Extract topics with these guidelines:
+- Focus on concrete, researchable topics (not generic conversation)
+- Prioritize technical terms, product names, methodologies, and specific concepts
+- Identify pain points or challenges that could benefit from solutions
+- Look for decision points where research could help
+- Extract entities like company names, technologies, frameworks, or standards
 
-Be selective - only extract truly important topics worth researching.
+Respond with a JSON object:
+{
+  "topics": [3-5 main topics worth researching, be specific],
+  "questions": [any questions that need answers],
+  "terms": [technical terms or jargon needing explanation],
+  "entities": [specific products, companies, technologies mentioned],
+  "challenges": [problems or pain points discussed]
+}
 
-Example response:
-{"topics": ["machine learning algorithms", "neural networks"], "questions": ["How does backpropagation work?"], "terms": ["gradient descent", "loss function"]}`;
+Example for a MongoDB discussion:
+{
+  "topics": ["MongoDB sharding strategies", "write concern configuration", "replica set elections"],
+  "questions": ["How to optimize query performance with compound indexes?"],
+  "terms": ["write concern", "read preference", "oplog"],
+  "entities": ["MongoDB Atlas", "WiredTiger storage engine"],
+  "challenges": ["slow aggregation pipeline performance", "connection pool exhaustion"]
+}`;
   }
 
   buildMeetingNotesPrompt(transcript, topics) {
@@ -191,12 +213,41 @@ Extract specific, actionable items with clear ownership when possible. Only incl
       return {
         topics: parsed.topics || [],
         questions: parsed.questions || [],
-        terms: parsed.terms || []
+        terms: parsed.terms || [],
+        entities: parsed.entities || [],
+        challenges: parsed.challenges || []
       };
     } catch (error) {
       console.error('Failed to parse topics response:', error);
-      return { topics: [], questions: [], terms: [] };
+      // Try to extract topics from plain text if JSON parsing fails
+      const topics = this.extractTopicsFromText(response);
+      return { 
+        topics: topics, 
+        questions: [], 
+        terms: [],
+        entities: [],
+        challenges: []
+      };
     }
+  }
+  
+  extractTopicsFromText(text) {
+    // Fallback topic extraction using regex patterns
+    const topics = [];
+    
+    // Look for quoted phrases
+    const quotedMatches = text.match(/"([^"]+)"/g);
+    if (quotedMatches) {
+      topics.push(...quotedMatches.map(m => m.replace(/"/g, '')));
+    }
+    
+    // Look for bullet points or numbered lists
+    const listMatches = text.match(/(?:^|\n)[-•*\d]+\.?\s+(.+)/gm);
+    if (listMatches) {
+      topics.push(...listMatches.map(m => m.replace(/^[-•*\d]+\.?\s+/, '').trim()));
+    }
+    
+    return topics.slice(0, 5); // Limit to 5 topics
   }
 
   parseMeetingNotesResponse(response) {

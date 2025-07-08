@@ -2701,6 +2701,7 @@ function App() {
                   {viewMode === 'transcript' && '📝 Live Transcript'}
                   {viewMode === 'captions' && '💬 Live Captions'}
                   {viewMode === 'audiogram' && '🎵 Audio Visualization'}
+                  {viewMode === 'research' && '🔬 Research & Recommendations'}
                 </Typography>
                 
                 <Box sx={{ display: 'flex', gap: 1 }}>
@@ -2724,6 +2725,19 @@ function App() {
                     color={viewMode === 'transcript' ? 'primary' : 'default'}
                     onClick={() => setViewMode('transcript')}
                     sx={{ cursor: 'pointer' }}
+                  />
+                  <Chip
+                    label={`Research (${research.length})`}
+                    size="small"
+                    color={viewMode === 'research' ? 'primary' : 'default'}
+                    onClick={() => setViewMode('research')}
+                    sx={{ 
+                      cursor: 'pointer',
+                      backgroundColor: viewMode === 'research' ? undefined : research.length > 0 ? 'rgba(19, 170, 82, 0.15)' : undefined,
+                      '&:hover': {
+                        backgroundColor: research.length > 0 ? 'rgba(19, 170, 82, 0.25)' : undefined
+                      }
+                    }}
                   />
                 </Box>
               </Box>
@@ -2769,6 +2783,124 @@ function App() {
                     }}
                   >
                     {transcript || 'Full transcript will appear here when you start recording...'}
+                  </Box>
+                )}
+                
+                {viewMode === 'research' && (
+                  <Box sx={{ 
+                    height: '100%',
+                    overflow: 'auto',
+                    p: 2
+                  }}>
+                    {research.length === 0 ? (
+                      <Box sx={{ 
+                        textAlign: 'center', 
+                        py: 6,
+                        color: 'text.secondary'
+                      }}>
+                        <Typography variant="h5" sx={{ mb: 2 }}>
+                          🔬 No Research Yet
+                        </Typography>
+                        <Typography variant="body1" sx={{ mb: 3 }}>
+                          Start a conversation and I'll automatically research relevant topics
+                        </Typography>
+                        <Typography variant="body2" sx={{ color: 'text.disabled' }}>
+                          Topics detected: {topics.length}
+                        </Typography>
+                      </Box>
+                    ) : (
+                      <Box sx={{ 
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))',
+                        gap: 2
+                      }}>
+                        {research.map((item, index) => (
+                          <Card 
+                            key={`research-view-${index}`}
+                            sx={{ 
+                              p: 3, 
+                              bgcolor: 'background.paper', 
+                              border: '1px solid',
+                              borderColor: 'divider',
+                              transition: 'all 0.2s ease',
+                              cursor: 'pointer',
+                              '&:hover': { 
+                                transform: 'translateY(-4px)',
+                                boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
+                                borderColor: 'primary.main'
+                              }
+                            }}
+                          >
+                            <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
+                              <Typography variant="h6" sx={{ 
+                                fontSize: '18px',
+                                fontWeight: 600, 
+                                color: 'primary.dark',
+                                flex: 1
+                              }}>
+                                {item.topic}
+                              </Typography>
+                              <Chip 
+                                label={item.provider || 'Research'} 
+                                size="small"
+                                sx={{ 
+                                  backgroundColor: 'rgba(19, 170, 82, 0.1)',
+                                  color: 'primary.main',
+                                  fontWeight: 500
+                                }}
+                              />
+                            </Box>
+                            
+                            <Typography variant="body1" sx={{ 
+                              mb: 2,
+                              color: 'text.secondary',
+                              lineHeight: 1.7
+                            }}>
+                              {item.summary}
+                            </Typography>
+                            
+                            {item.keyPoints && item.keyPoints.length > 0 && (
+                              <Box sx={{ mb: 2 }}>
+                                <Typography variant="subtitle2" sx={{ mb: 1, color: 'text.primary' }}>
+                                  Key Points:
+                                </Typography>
+                                <Box component="ul" sx={{ m: 0, pl: 2.5 }}>
+                                  {item.keyPoints.slice(0, 3).map((point, idx) => (
+                                    <Typography 
+                                      key={idx} 
+                                      component="li" 
+                                      variant="body2" 
+                                      sx={{ color: 'text.secondary', mb: 0.5 }}
+                                    >
+                                      {point}
+                                    </Typography>
+                                  ))}
+                                </Box>
+                              </Box>
+                            )}
+                            
+                            {item.url && (
+                              <Button
+                                href={item.url}
+                                target="_blank"
+                                size="small"
+                                variant="text"
+                                sx={{ 
+                                  color: 'info.main',
+                                  textTransform: 'none',
+                                  fontWeight: 500,
+                                  '&:hover': { 
+                                    backgroundColor: 'rgba(0, 84, 255, 0.08)'
+                                  }
+                                }}
+                              >
+                                Learn more →
+                              </Button>
+                            )}
+                          </Card>
+                        ))}
+                      </Box>
+                    )}
                   </Box>
                 )}
               </Box>
@@ -2884,15 +3016,20 @@ function App() {
                         </Card>
                       ))}
                       
-                      {/* Traditional research insights */}
-                      {research.slice(-2).map((item, index) => (
+                      {/* Traditional research insights - Show more items */}
+                      {research.slice(-5).map((item, index) => (
                         <Card 
                           key={`research-${index}`}
                           sx={{ 
                             p: 1.5, 
-                            bgcolor: 'rgba(6, 182, 212, 0.05)', 
+                            bgcolor: 'rgba(19, 170, 82, 0.08)', 
                             borderRadius: 2,
-                            border: '1px solid rgba(6, 182, 212, 0.1)',
+                            border: '1px solid rgba(19, 170, 82, 0.2)',
+                            transition: 'all 0.3s ease',
+                            '&:hover': { 
+                              transform: 'translateY(-2px)',
+                              boxShadow: '0 4px 12px rgba(19, 170, 82, 0.2)'
+                            }
                           }}
                         >
                           <Typography variant="body2" sx={{ 

@@ -17,6 +17,8 @@ class ConversationProcessor extends EventEmitter {
     this.processingQueue = [];
     this.isProcessing = false;
     this.previousResearch = []; // Track previous research for context
+    this.conversationHistory = []; // Store conversation history for sliding window
+    this.contextWindow = 200; // Keep last 200 words for context
     
     // Configuration - lowered for testing
     this.minWordsPerChunk = this.config.thresholds.min_words_per_chunk || 5; // Lowered from 25 to 5
@@ -161,9 +163,19 @@ class ConversationProcessor extends EventEmitter {
         timestamp: new Date().toISOString()
       });
       
-      // Extract topics using LLM
-      console.log('🧠 Processor: Extracting topics from chunk:', chunk.substring(0, 100) + '...');
-      const topicData = await extractTopics(chunk);
+      // Update conversation history for sliding window
+      this.conversationHistory.push(chunk);
+      const historyWords = this.conversationHistory.join(' ').split(/\s+/);
+      if (historyWords.length > this.contextWindow) {
+        // Keep only the last N words
+        const recentWords = historyWords.slice(-this.contextWindow);
+        this.conversationHistory = [recentWords.join(' ')];
+      }
+      
+      // Extract topics using LLM with context
+      console.log('🧠 Processor: Extracting topics from chunk with context');
+      const contextualChunk = this.conversationHistory.join(' ').split(/\s+/).slice(-50).join(' ') + ' ' + chunk;
+      const topicData = await extractTopics(contextualChunk);
       console.log('🎯 Processor: Topic extraction result:', topicData);
       
       // Enhance with RAG if available
@@ -196,11 +208,13 @@ class ConversationProcessor extends EventEmitter {
           ragEnhanced: ragEnhancedTopics // Include RAG enhanced data
         });
         
-        // Fetch research summaries - filter out invalid topics
+        // Fetch research summaries - combine all extracted elements
         const allTopics = [
           ...topicData.topics,
-          ...topicData.questions.slice(0, 1), // Include first question
-          ...topicData.terms.slice(0, 1) // Include first term
+          ...topicData.questions.slice(0, 2), // Include first 2 questions
+          ...topicData.terms.slice(0, 2), // Include first 2 terms
+          ...(topicData.entities || []).slice(0, 2), // Include entities
+          ...(topicData.challenges || []).slice(0, 2) // Include challenges
         ].filter(topic => 
           topic && 
           typeof topic === 'string' && 
