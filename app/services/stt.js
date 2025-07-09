@@ -108,6 +108,9 @@ function cleanTranscriptText(line) {
     /^\s*\[\\d+K\s*$/,  // Remove lines that are just terminal control codes
     /^\s*\x1b\[.*$/,   // Remove lines starting with ANSI escape sequences
     /^\s*$/, // Empty lines
+    /^(you[\s\.\,\!\?]+)+$/i,  // Filter out repeated "you" patterns
+    /^(you you|you, you|you\. you)+/i,  // Filter variations of repeated "you"
+    /^\s*you\s*$/i,  // Filter single "you" on a line
   ];
   
   // Check if line matches any filter
@@ -126,6 +129,17 @@ function cleanTranscriptText(line) {
     if (repetitions > words.length / 2) {
       return null; // Likely repetitive noise
     }
+  }
+  
+  // Special handling for the "you" bug
+  const lowerLine = line.toLowerCase();
+  const youCount = (lowerLine.match(/\byou\b/g) || []).length;
+  const totalWords = words.filter(w => w.length > 0).length;
+  
+  // If "you" makes up more than 50% of the words, it's likely the bug
+  if (youCount > 0 && totalWords > 0 && (youCount / totalWords) > 0.5) {
+    console.log(`cleanTranscriptText: Filtered "you" bug - ${youCount} instances in ${totalWords} words`);
+    return null;
   }
   
   // Clean up the line
@@ -309,9 +323,12 @@ async function startTranscription(onTranscript, audioDeviceIndex = null, enableS
 
   // Start ffmpeg to capture audio from microphone for transcription
   // Use the selected audio device with fallback logic
-  // Default to device 3 (MacBook Pro Microphone) instead of 1 (virtual devices)
+  // Default to device 3 (MacBook Pro Microphone) as it was before
   let deviceIndex = audioDeviceIndex !== null ? audioDeviceIndex : 3;
   console.log(`STT: Audio device selection - input: ${audioDeviceIndex}, trying: ${deviceIndex}`);
+  
+  // Track if we're experiencing the "you" bug
+  let youBugDetectionCount = 0;
   
   // Function to try different audio devices with fallback
   function tryStartFFmpeg(tryDeviceIndex) {
@@ -343,7 +360,17 @@ async function startTranscription(onTranscript, audioDeviceIndex = null, enableS
           ffmpegProc.kill('SIGTERM');
           reject(new Error(`Startup timeout for device ${tryDeviceIndex}`));
         }
-      }, 3000);
+      }, 5000);
+      
+      // Fallback: if process doesn't crash within 2 seconds, consider it successful
+      const fallbackTimer = setTimeout(() => {
+        if (!hasStarted && !ffmpegProc.killed) {
+          console.log(`STT: FFmpeg fallback success for device ${tryDeviceIndex} - process still running`);
+          hasStarted = true;
+          clearTimeout(startupTimer);
+          resolve(ffmpegProc);
+        }
+      }, 2000);
       
       ffmpegProc.stderr.on('data', (data) => {
         const text = data.toString();
@@ -351,9 +378,15 @@ async function startTranscription(onTranscript, audioDeviceIndex = null, enableS
         console.log(`STT: FFmpeg stderr (device ${tryDeviceIndex}):`, text);
         
         // Check for successful startup indicators
-        if (text.includes('Stream mapping:') || text.includes('Input #0')) {
+        if (text.includes('Stream mapping:') || 
+            text.includes('Input #0') || 
+            text.includes('Output #0') ||
+            text.includes('bitrate:') ||
+            text.includes('segment') ||
+            text.includes('avfoundation')) {
           hasStarted = true;
           clearTimeout(startupTimer);
+          clearTimeout(fallbackTimer);
           console.log(`STT: FFmpeg successfully started with device ${tryDeviceIndex}`);
           resolve(ffmpegProc);
         }
@@ -364,6 +397,7 @@ async function startTranscription(onTranscript, audioDeviceIndex = null, enableS
             text.includes('Device or resource busy') ||
             text.includes('Permission denied')) {
           clearTimeout(startupTimer);
+          clearTimeout(fallbackTimer);
           console.log(`STT: Device ${tryDeviceIndex} failed:`, text.trim());
           ffmpegProc.kill('SIGTERM');
           reject(new Error(`Device ${tryDeviceIndex} unavailable: ${text.trim()}`));
@@ -372,12 +406,14 @@ async function startTranscription(onTranscript, audioDeviceIndex = null, enableS
       
       ffmpegProc.on('error', (error) => {
         clearTimeout(startupTimer);
+        clearTimeout(fallbackTimer);
         console.error(`STT: FFmpeg process error (device ${tryDeviceIndex}):`, error);
         reject(error);
       });
       
       ffmpegProc.on('exit', (code) => {
         clearTimeout(startupTimer);
+        clearTimeout(fallbackTimer);
         if (code !== 0 && !hasStarted) {
           console.log(`STT: FFmpeg exited early with code ${code} for device ${tryDeviceIndex}`);
           reject(new Error(`FFmpeg exited with code ${code} for device ${tryDeviceIndex}`));
@@ -388,7 +424,9 @@ async function startTranscription(onTranscript, audioDeviceIndex = null, enableS
   
   // Try devices in order with fallback
   async function startFFmpegWithFallback() {
-    const devicesToTry = [3, 2, 6, 0]; // Try MacBook mic, iPhone mic, Camo mic, then fallbacks
+    // IMPORTANT: Device 0 and 1 often cause the "you" bug (virtual devices/system audio)
+    // Available devices: 2=iPhone Microphone, 3=MacBook Pro Microphone, 6=Camo Microphone
+    const devicesToTry = [3, 2, 6]; // Try MacBook mic first, then iPhone mic, then Camo mic
     
     for (const tryDevice of devicesToTry) {
       try {
@@ -465,6 +503,17 @@ async function startTranscription(onTranscript, audioDeviceIndex = null, enableS
               continue;
             }
             
+            // Save a copy of the problematic audio file for debugging
+            if (process.env.DEBUG_AUDIO) {
+              const debugDir = path.join(os.homedir(), 'bitscribe-debug-audio');
+              if (!fs.existsSync(debugDir)) {
+                fs.mkdirSync(debugDir, { recursive: true });
+              }
+              const debugFile = path.join(debugDir, `debug-${Date.now()}-${file}`);
+              fs.copyFileSync(audioFile, debugFile);
+              console.log(`STT: DEBUG - Saved audio file copy to: ${debugFile}`);
+            }
+            
             // Process with whisper
             const whisperArgs = [
               '-m', MODEL_PATH,
@@ -488,11 +537,42 @@ async function startTranscription(onTranscript, audioDeviceIndex = null, enableS
             
             const whisperProc = spawn(WHISPER_BIN, whisperArgs);
             
+            let youBugDetected = false;
+            
             whisperProc.stdout.on('data', (data) => {
               const text = data.toString();
               console.log('STT: Whisper stdout RAW:', text);
               const lines = text.split('\n');
               console.log(`STT: Processing ${lines.length} lines from whisper output`);
+              
+              // Check for "you" bug pattern in raw output
+              const lowerText = text.toLowerCase();
+              const youMatches = (lowerText.match(/\byou\b/g) || []).length;
+              const totalWords = text.split(/\s+/).filter(w => w.length > 0).length;
+              
+              if (youMatches > 5 && totalWords > 0 && (youMatches / totalWords) > 0.3) {
+                console.log(`STT: WARNING - Detected "you" bug pattern in raw output: ${youMatches} instances in ${totalWords} words`);
+                youBugDetected = true;
+                youBugDetectionCount++;
+                
+                // Alert user about the issue
+                onTranscript({ 
+                  type: 'system', 
+                  text: '[Audio feedback detected - please check your audio input device or use headphones]' 
+                });
+                
+                // If we've detected the bug multiple times, suggest switching devices
+                if (youBugDetectionCount > 3) {
+                  onTranscript({ 
+                    type: 'system', 
+                    text: '[Persistent audio feedback - consider switching microphone or restarting transcription]' 
+                  });
+                }
+                
+                // Skip processing this segment
+                return;
+              }
+              
               lines.forEach((line, index) => {
                 console.log(`STT: Line ${index}: "${line}"`);
                 
@@ -506,6 +586,16 @@ async function startTranscription(onTranscript, audioDeviceIndex = null, enableS
                 console.log(`STT: Parsed line ${index}:`, result);
                 
                 if (result && result.text) {
+                  // Additional "you" bug check on individual lines
+                  const wordCount = result.text.split(/\s+/).filter(w => w.length > 0).length;
+                  const youCount = (result.text.toLowerCase().match(/\byou\b/g) || []).length;
+                  
+                  if (youCount > 2 && wordCount > 0 && (youCount / wordCount) > 0.5) {
+                    console.log(`STT: ❌ Filtered "you" bug line: ${youCount} instances in ${wordCount} words`);
+                    youBugDetected = true;
+                    return;
+                  }
+                  
                   const transcriptText = result.speaker ? `${result.speaker}: ${result.text}` : result.text;
                   console.log('STT: ✅ Sending transcript:', transcriptText);
                   onTranscript({ 

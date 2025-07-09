@@ -3128,6 +3128,7 @@ function App() {
                       }}>
                         {research.map((item, index) => (
                           <Card 
+                            id={`research-detail-${research.length - 1 - index}`}
                             key={`research-view-${index}`}
                             sx={{ 
                               p: 3, 
@@ -3338,10 +3339,23 @@ function App() {
                             borderRadius: 2,
                             border: '1px solid rgba(19, 170, 82, 0.2)',
                             transition: 'all 0.3s ease',
+                            cursor: 'pointer',
                             '&:hover': { 
                               transform: 'translateY(-2px)',
-                              boxShadow: '0 4px 12px rgba(19, 170, 82, 0.2)'
+                              boxShadow: '0 4px 12px rgba(19, 170, 82, 0.2)',
+                              bgcolor: 'rgba(19, 170, 82, 0.12)'
                             }
+                          }}
+                          onClick={() => {
+                            // Switch to research view and highlight this research item
+                            setViewMode('research');
+                            // Optionally scroll to this specific research item
+                            setTimeout(() => {
+                              const researchElement = document.getElementById(`research-detail-${index}`);
+                              if (researchElement) {
+                                researchElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                              }
+                            }, 100);
                           }}
                         >
                           <Typography variant="body2" sx={{ 
@@ -3353,8 +3367,14 @@ function App() {
                             🔍 {item.topic || 'Research'}
                           </Typography>
                           <Typography variant="body2" color="text.secondary" sx={{ fontSize: '11px' }}>
-                            {item.summary || (item.sources && item.sources[0]?.summary) || 'Research insight available'}
+                            {item.summary || (item.sources && item.sources[0]?.summary) || 'Click to view full research'}
                           </Typography>
+                          {/* Add a small indicator that it's clickable */}
+                          <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 0.5 }}>
+                            <Typography variant="caption" sx={{ fontSize: '10px', color: 'primary.main' }}>
+                              → View Details
+                            </Typography>
+                          </Box>
                         </Card>
                       ))}
                     </Stack>
